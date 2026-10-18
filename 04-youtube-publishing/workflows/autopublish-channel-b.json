@@ -1,0 +1,646 @@
+{
+  "name": "YouTube Auto-Publish (Channel B — Scheduled SEO Upload)",
+  "meta": {
+    "instanceId": "0c360c25e8e9ea06a7e37afd5948ea7611f41c464c2d9455a692de1056a78ed6",
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "id": "sticky-note-main",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "width": 1100,
+        "height": 360,
+        "content": "## 🚀 Channel B — YouTube Auto-Publisher (Schedule-Triggered + AI SEO) — 100% FREE\n\n### ✅ All Credentials Already Configured\n| Service | Status | Credential Name in n8n |\n|---|---|---|\n| Google Drive (Channel B) | ✅ Ready | Google Drive veo3 |\n| Google Gemini API | ✅ Ready | ai veo3 |\n| YouTube (Channel B) | ✅ Ready | YouTube ai veo3 |\n| Telegram Bot (Ai_veo3Bot) | ⚙️ Add once | Telegram Bot — Channel B |\n\n### 📅 Auto Upload Schedule (India Standard Time)\n- **Mon–Fri (Weekdays):** Posts at **6:00 PM IST**\n- **Sat–Sun (Weekends):** Posts at **11:00 AM IST** and **6:00 PM IST**\n\n### 📋 How to Use\n1. Create a Queue Folder A in Google Drive and paste its ID in the **`List Queue Folder`** node.\n2. Upload all your Shorts videos into the Queue Folder at once.\n3. The workflow runs on schedule, extracts one video in alphabetical order, processes it, publishes it, and deletes it from Queue Folder A."
+      },
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                5
+              ],
+              "triggerAtHour": 12,
+              "triggerAtMinute": 38
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-combined",
+      "name": "Schedule Trigger (Mon-Sun)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "authentication": "oAuth2",
+        "searchMethod": "query",
+        "queryString": "'124xifvalyDFoyQSZUx6zNtyS7IqyaS15' in parents and trashed = false",
+        "options": {}
+      },
+      "id": "gd-list-queue",
+      "name": "List Queue Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        300,
+        360
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const files = items;\nif (!files || files.length === 0 || !files[0].json.id) {\n  return [{ json: { queueEmpty: true } }];\n}\n\n// Sort alphabetically by name\nfiles.sort((a, b) => {\n  const nameA = (a.json.name || '').toLowerCase();\n  const nameB = (b.json.name || '').toLowerCase();\n  return nameA.localeCompare(nameB);\n});\n\nlet originalName = files[0].json.name || 'video.mp4';\nlet cleanName = originalName.replaceAll(' ', '_');\nif (!cleanName.toLowerCase().endsWith('.mp4')) {\n  cleanName += '.mp4';\n}\n\n// Return the first item\nreturn [{\n  json: {\n    queueEmpty: false,\n    ...files[0].json,\n    normalizedFilename: cleanName\n  }\n}];"
+      },
+      "id": "select-first-queue-item",
+      "name": "Select First Alphabetically",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-empty",
+              "leftValue": "={{ $json.queueEmpty }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-check-queue",
+      "name": "If Queue Empty",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [
+        700,
+        360
+      ]
+    },
+    {
+      "id": "telegram-queue-empty",
+      "name": "Telegram — Queue Empty Alert",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        900,
+        220
+      ],
+      "parameters": {
+        "chatId": "-4127128831",
+        "text": "⚠️ *YouTube Shorts Queue is Empty!*\n\nNo videos found in your Google Drive Queue Folder. Please upload new videos to keep posting on schedule.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "aHtCunvn0weoyzqd",
+          "name": "ai veo3"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "typeVersion": 1.2
+    },
+    {
+      "id": "gd-download",
+      "name": "Download Video from Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        900,
+        480
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "authentication": "oAuth2",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Select First Alphabetically').item.json.id }}"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "typeVersion": 1
+    },
+    {
+      "id": "extract-metadata",
+      "name": "Extract Title & Description",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1500,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const originalName = $('Select First Alphabetically').item.json.name || 'video.mp4';\nconst cleanName = $('Select First Alphabetically').item.json.normalizedFilename;\nconst rawTitle = originalName.replace(/\\.[^.]+$/, '');\nconst videoTitle = rawTitle\n  .replace(/[_\\-]+/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst videoDescription = $('Select First Alphabetically').item.json.description || '';\nconst diskFilename = '/tmp/' + cleanName;\nconst scheduledSlot = 'Daily Schedule';\n\nreturn [{\n  json: {\n    videoTitle,\n    videoDescription,\n    diskFilename,\n    scheduledSlot\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "parse-gemini-b",
+      "name": "Parse Gemini JSON",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1980,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const rawOutput = items[0].json.output;\nlet clean = rawOutput\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .trim();\n\nconst start = clean.indexOf('{');\nconst end   = clean.lastIndexOf('}');\nif (start === -1 || end === -1) {\n  throw new Error('Gemini did not return valid JSON. Got: ' + rawOutput);\n}\nconst data = JSON.parse(clean.substring(start, end + 1));\n\nconst rawTags   = data.youtubeTags || [];\nconst tagsArr   = Array.isArray(rawTags) ? rawTags : rawTags.split(',');\n\nconst lowerTags = tagsArr.map(t => t.trim().toLowerCase());\nif (!lowerTags.includes('shorts')) tagsArr.unshift('shorts');\n\nconst seen = new Set();\nconst tagsString = tagsArr\n  .map(t => t.trim().toLowerCase().substring(0, 30))\n  .filter(t => { if (!t || seen.has(t)) return false; seen.add(t); return true; })\n  .slice(0, 25)\n  .join(',');\n\nlet title = (data.youtubeTitle || '').substring(0, 100);\nif (!title.toLowerCase().includes('#shorts')) {\n  title = title.substring(0, 91).trimEnd() + ' #Shorts';\n}\n\nlet description = data.youtubeDescription || '';\nif (!description.toLowerCase().includes('#shorts')) {\n  description = description.trimEnd() + '\\n#Shorts #YouTubeShorts';\n}\n\nconst categoryId      = String(data.youtubeCategory || '15');\nconst defaultLanguage = data.defaultLanguage || 'en';\n\nreturn [{\n  json: {\n    ...items[0].json,\n    youtubeTitle: title,\n    youtubeDescription: description,\n    youtubeTags: tagsString,\n    categoryId,\n    defaultLanguage\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "youtube-upload-b",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        2380,
+        480
+      ],
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Parse Gemini JSON').item.json.youtubeTitle }}",
+        "description": "={{ $('Parse Gemini JSON').item.json.youtubeDescription }}",
+        "binaryPropertyName": "data",
+        "options": {
+          "privacyStatus": "public",
+          "tags": "={{ $('Parse Gemini JSON').item.json.youtubeTags }}",
+          "categoryId": "={{ $('Parse Gemini JSON').item.json.categoryId }}",
+          "defaultLanguage": "={{ $('Parse Gemini JSON').item.json.defaultLanguage }}"
+        }
+      },
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "Ise80JbKwA5X6AQY",
+          "name": "YouTube ai veo3"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 10000,
+      "typeVersion": 1
+    },
+    {
+      "id": "delete-drive-file",
+      "name": "Delete File from Queue Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        3380,
+        480
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "deleteFile",
+        "authentication": "oAuth2",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Select First Alphabetically').item.json.id }}"
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "typeVersion": 3
+    },
+    {
+      "id": "check-upload-result",
+      "name": "Check Upload Result",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        3580,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const upload = items[0].json;\nconst videoId = $('YouTube Upload').first().json.id;\nreturn [{\n  json: {\n    success: !upload.error,\n    videoId,\n    videoUrl: 'https://www.youtube.com/shorts/' + videoId,\n    title: $('Parse Gemini JSON').first().json.youtubeTitle,\n    uploadedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "success-telegram",
+      "name": "Telegram — Upload Success",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        3780,
+        480
+      ],
+      "parameters": {
+        "chatId": "-4127128831",
+        "text": "=✅ *Video Published on YouTube!*\n\n📹 *Title:* {{ $json.title }}\n🔗 *URL:* {{ $json.videoUrl }}\n⏰ *Published at:* {{ $json.uploadedAt }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "aHtCunvn0weoyzqd",
+          "name": "ai veo3"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "typeVersion": 1.2
+    },
+    {
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "position": [
+        840,
+        780
+      ],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "error-filter",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        1040,
+        780
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 1,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "dns-filter-b",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              },
+              "leftValue": "={{ $json.trigger.error.message }}",
+              "rightValue": "The DNS server returned an error, perhaps the server is offline"
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "telegram-error",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        1240,
+        780
+      ],
+      "parameters": {
+        "chatId": "-4127128831",
+        "text": "=🚨 *Channel B Upload Error!*\n\n❌ *Error:* {{ $json.trigger.error.message }}\n📍 *Failed at node:* {{ $json.trigger.node.name }}\n\nOpen n8n dashboard to inspect and retry.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "aHtCunvn0weoyzqd",
+          "name": "ai veo3"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "typeVersion": 1.2
+    },
+    {
+      "id": "generate-seo",
+      "name": "Generate YouTube SEO with Gemini",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1740,
+        480
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate ultra-viral YouTube Shorts metadata for the following AI-generated cinematic video.\n\n**Video Title / Topic:** {{ $json.videoTitle }}\n**Creator Description:** {{ $json.videoDescription || 'Not provided — infer from title.' }}\n**Scheduled for:** {{ $json.scheduledSlot }}\n\nThis is a YouTube SHORT (vertical 9:16, ~1 min 20 sec). Make EVERYTHING hyper-specific to this exact video. Zero generic filler. Maximum virality on the Shorts feed.",
+        "options": {
+          "systemMessage": "You are the world's #1 YouTube Shorts growth hacker and viral SEO expert for AI-generated cinematic content. You have helped channels grow from 0 to 10M subscribers using metadata alone. Your Shorts consistently achieve millions of views.\n\nThis is a YouTube SHORT (~1:20, vertical 9:16). Optimise for the Shorts feed algorithm.\n\n════════════════════════════════════\nSTRICT RULES — FOLLOW EXACTLY:\n════════════════════════════════════\n\nyoutubeTitle (max 65 chars — MUST end with #Shorts):\n- Pick the most viral formula for this specific video:\n  → \"[Subject] Looks INSANE in AI 🔥 #Shorts\"\n  → \"This AI [Subject] Will Leave You Speechless 😱 #Shorts\"\n  → \"POV: AI Just Brought [Subject] to Life ✨ #Shorts\"\n  → \"Nobody Believed AI Could Create This [Subject] #Shorts\"\n  → \"The Most [Emotion] [Subject] You've Ever Seen #Shorts\"\n- Use 1–2 relevant emojis. ALWAYS end with #Shorts. Reference EXACT subject.\n\nyoutubeDescription (follow LINE BY LINE — do not skip or merge lines):\nL1: 🔥 [Bold 1-line emotional hook — stops the scroll]\nL2: 👀 [One curiosity question about THIS video — makes them watch]\nL3: [blank]\nL4: [Vivid sentence 1 — what viewer sees in first 5 seconds. Specific.]\nL5: [Vivid sentence 2 — main scene action with sensory detail.]\nL6: [Vivid sentence 3 — the most jaw-dropping moment.]\nL7: [blank]\nL8: ✨ Created with Google VEO 3 — the world's most advanced AI video generation model.\nL9: 🔔 Subscribe for daily AI cinematic Shorts | New video every single day!\nL10: [blank]\nL11: 📌 [10–14 high-traffic keywords in a natural flowing sentence about THIS video's exact subject — not generic AI terms]\nL12: [blank]\nL13: #shorts #viralshorts #mrindianhackershorts #mrindianhackernewvideo #VEO3 #AIVideo #GenerativeAI #[ExactSubject1] #[ExactSubject2] #CinematicAI #AIShorts #AIArt #[NicheTag]\n\nyoutubeTags — JSON array of exactly 25 tags:\n1. (8 tags) Hyper-specific to THIS video's exact subject. What would someone search to find this Short?\n2. (5 tags) Shorts discovery: \"shorts\", \"youtube shorts\", \"viral shorts\", \"ai shorts\", \"short video\"\n3. (5 tags) AI/VEO3 niche: \"veo3\", \"google veo 3\", \"ai generated video\", \"generative ai video\", \"ai cinematic\"\n4. (4 tags) Broad related: \"ai art 2025\", \"cinematic short\", \"ai video 2025\", \"generative ai\"\n5. (3 tags) Emotion/viral: \"jaw dropping\", \"mind blowing\", \"breathtaking\"\nRules: Max 30 chars each. No duplicates. NO filler tags ('video','youtube','watch','content','amazing').\n\nyoutubeCategory — pick the single best number from this list:\n1=Film & Animation | 2=Autos | 10=Music | 15=Pets | 17=Sports | 19=Travel | 22=People & Blogs | 23=Comedy | 24=Entertainment | 25=News | 26=Howto | 27=Education | 28=Science | 29=Nonprofits\n\ndefaultLanguage — always \"en\"\n\nResponse MUST be a single raw JSON object. No markdown. No code blocks. No extra text.\n\n{\n  \"youtubeTitle\": \"...\",\n  \"youtubeDescription\": \"...\",\n  \"youtubeTags\": [\"tag1\", \"tag2\", \"...\"],\n  \"youtubeCategory\": \"24\",\n  \"defaultLanguage\": \"en\"\n}"
+        }
+      },
+      "typeVersion": 3.1
+    },
+    {
+      "id": "gemini-model-b",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        1660,
+        680
+      ],
+      "parameters": {
+        "options": {},
+        "modelName": "models/gemini-2.5-flash"
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "eZWTI13itJfxflpY",
+          "name": "ai veo3"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "write-video-tmp",
+      "name": "Write Video to Disk",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        480
+      ],
+      "parameters": {
+        "fileName": "/tmp/video_to_publish.mp4",
+        "dataPropertyName": "data"
+      }
+    },
+    {
+      "id": "replace-audio-cmd",
+      "name": "Replace Copyrighted Audio",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        480
+      ],
+      "parameters": {
+        "command": "if [ -f /workspace/01-video-editing/scripts/replace_audio.py ]; then python3 /workspace/01-video-editing/scripts/replace_audio.py /tmp/video_to_publish.mp4 /tmp/video_clean.mp4; else python3 /workspace/replace_audio.py /tmp/video_to_publish.mp4 /tmp/video_clean.mp4; fi"
+      }
+    },
+    {
+      "id": "read-video-tmp",
+      "name": "Read Cleaned Video",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        480
+      ],
+      "parameters": {
+        "filePath": "/tmp/video_clean.mp4",
+        "dataPropertyName": "data"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Mon-Sun)": {
+      "main": [
+        [
+          {
+            "node": "List Queue Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Queue Folder": {
+      "main": [
+        [
+          {
+            "node": "Select First Alphabetically",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select First Alphabetically": {
+      "main": [
+        [
+          {
+            "node": "If Queue Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Queue Empty": {
+      "main": [
+        [
+          {
+            "node": "Telegram — Queue Empty Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Title & Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Title & Description": {
+      "main": [
+        [
+          {
+            "node": "Generate YouTube SEO with Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate YouTube SEO with Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate YouTube SEO with Gemini",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini JSON": {
+      "main": [
+        [
+          {
+            "node": "Download Video from Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video from Drive": {
+      "main": [
+        [
+          {
+            "node": "Write Video to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Upload": {
+      "main": [
+        [
+          {
+            "node": "Delete File from Queue Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete File from Queue Folder": {
+      "main": [
+        [
+          {
+            "node": "Check Upload Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Upload Result": {
+      "main": [
+        [
+          {
+            "node": "Telegram — Upload Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Video to Disk": {
+      "main": [
+        [
+          {
+            "node": "Replace Copyrighted Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Copyrighted Audio": {
+      "main": [
+        [
+          {
+            "node": "Read Cleaned Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Cleaned Video": {
+      "main": [
+        [
+          {
+            "node": "YouTube Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

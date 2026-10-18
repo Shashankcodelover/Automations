@@ -1,0 +1,19 @@
+# n8n Automation & Python Processing Suite Dependencies
+# =====================================================
+
+# HTTP requests & API calls
+requests>=2.31.0
+
+# Google Generative AI (Gemini) for transcript analysis & SEO generation
+google-generativeai>=0.8.0
+
+# Google APIs (Drive & YouTube) for token acquisition & cloud publishing
+google-auth>=2.29.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.129.0
+
+# YouTube downloading and audio extraction (used by local clippers & music fetcher)
+yt-dlp>=2024.4.9
+
+# Note: ffmpeg is also required on system PATH for video clipping and rendering.

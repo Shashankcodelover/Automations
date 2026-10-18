@@ -1,0 +1,715 @@
+{
+  "name": "🎬 AI Video Editor — Revision Loop Edition",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "🎬 Start New AI Video Edit",
+        "formDescription": "Upload clips to a Google Drive folder (named: clip_1.mp4, clip_2.mp4...). Optionally add music. Write plain-English editing instructions.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Google Drive Folder ID (clips)",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Music Drive File ID (optional)",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Edit Instructions",
+              "placeholder": "Add title 'AI is Changing Everything' at top 0:00-0:04. Caption 'Subscribe!' center at 0:10-0:14. Speed up clip 2 by 1.5x. Wipe transition between clip 1 and 2.",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Channel Watermark",
+              "fieldType": "text",
+              "placeholder": "@MemesAdda",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ve-form-new",
+      "name": "🎬 Form: New Edit Job",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "✏️ Request Changes to Video",
+        "formDescription": "Describe what to change in the video. Be specific: clip positions, timing, text content, replace a clip, speed changes, etc.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Run ID (copy from Telegram message)",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "What changes do you want?",
+              "placeholder": "Examples:\n- Replace clip 2 with clip 4\n- Move the title to center and change text to 'Watch This!'\n- Remove the caption at 0:10\n- Make the transition between clip 1 and 2 a zoom-in instead of fade\n- Make clip 3 slow-motion at 0.5x speed",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ve-form-revision",
+      "name": "✏️ Form: Request Changes",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine if this is a fresh job or a revision\nlet folderId = '', musicId = '', editPrompt = '', watermark = '@MemesAdda', run_id = '';\nlet isRevision = false;\nlet revisionInstructions = '';\nlet iteration = 1;\n\n// ── Path A: Fresh edit from Form ───────────────────────────────────────────\ntry {\n  const form = $items('🎬 Form: New Edit Job');\n  if (form.length > 0 && form[0].json['Google Drive Folder ID (clips)']) {\n    folderId   = form[0].json['Google Drive Folder ID (clips)'];\n    musicId    = form[0].json['Music Drive File ID (optional)'] || '';\n    editPrompt = form[0].json['Edit Instructions'] || '';\n    watermark  = form[0].json['Channel Watermark'] || '@MemesAdda';\n    run_id     = Date.now().toString();\n    isRevision = false;\n    // Save fresh state to static data\n    const sd = $getWorkflowStaticData('global');\n    sd[run_id] = { folderId, musicId, editPrompt, watermark, iteration: 1, history: [editPrompt] };\n  }\n} catch(e) {}\n\n// ── Path B: Revision request from Form ────────────────────────────────────\nif (!folderId) {\n  try {\n    const rev = $items('✏️ Form: Request Changes');\n    if (rev.length > 0 && rev[0].json['Run ID (copy from Telegram message)']) {\n      run_id              = rev[0].json['Run ID (copy from Telegram message)'].trim();\n      revisionInstructions = rev[0].json['What changes do you want?'] || '';\n      isRevision          = true;\n      // Load previous state from static data\n      const sd = $getWorkflowStaticData('global');\n      const prev = sd[run_id] || {};\n      folderId   = prev.folderId || '';\n      musicId    = prev.musicId  || '';\n      watermark  = prev.watermark || '@MemesAdda';\n      iteration  = (prev.iteration || 1) + 1;\n      // Build cumulative edit prompt (history + new revision)\n      const history = prev.history || [prev.editPrompt || ''];\n      editPrompt = history[history.length - 1]; // carry forward the latest instructions\n      // Update static data\n      history.push(revisionInstructions);\n      sd[run_id] = { ...prev, iteration, history };\n    }\n  } catch(e) {}\n}\n\nif (!folderId || !run_id) throw new Error('No valid edit job found. Please start a new edit or provide a valid Run ID.');\nif (iteration > 10)       throw new Error('Maximum revision limit (10) reached for this job.');\n\nreturn [{ json: {\n  folderId, musicId, editPrompt, watermark, run_id,\n  isRevision, revisionInstructions, iteration\n} }];"
+      },
+      "id": "ve-route-inputs",
+      "name": "🔀 Route: New Job or Revision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "expression",
+          "value": "={{ $json.folderId }}"
+        },
+        "returnAll": true,
+        "options": {
+          "orderBy": "name"
+        }
+      },
+      "id": "ve-list-clips",
+      "name": "📂 List Clips from Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1860,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst videoExt = /\\.(mp4|mov|avi|mkv|webm)$/i;\nconst clips = all\n  .filter(item => videoExt.test(item.json.name || ''))\n  .sort((a, b) => (a.json.name || '').localeCompare(b.json.name || '', undefined, { numeric: true }));\n\nif (clips.length === 0) throw new Error('No video files (.mp4, .mov, .avi) found in the specified Drive folder.');\n\nconst { editPrompt, watermark, musicId, run_id, isRevision, revisionInstructions, iteration } = $('🔀 Route: New Job or Revision').first().json;\n\nreturn clips.map((item, i) => ({\n  json: {\n    ...item.json,\n    clip_index: i,\n    clip_count: clips.length,\n    clip_names: clips.map(c => c.json.name),\n    editPrompt, watermark, musicId, run_id,\n    isRevision, revisionInstructions, iteration\n  }\n}));"
+      },
+      "id": "ve-filter-sort",
+      "name": "🗂️ Filter & Sort Clips",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "expression",
+          "value": "={{ $json.id }}"
+        },
+        "options": {}
+      },
+      "id": "ve-download-clips",
+      "name": "⬇️ Download Clip",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1420,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fileName": "=/tmp/clip_{{ $json.clip_index }}.mp4",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "ve-write-clips",
+      "name": "💾 Write Clip to /tmp",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst clipCount = all.length;\nconst clipNames = all.map(i => i.json.name || `Clip ${i.json.clip_index + 1}`);\nconst { editPrompt, watermark, musicId, run_id, isRevision, revisionInstructions, iteration } = all[0].json;\nreturn [{ json: { clipCount, clipNames, editPrompt, watermark, musicId, run_id, isRevision, revisionInstructions, iteration } }];"
+      },
+      "id": "ve-build-meta",
+      "name": "📋 Collect Clip Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a professional video editor AI. You receive editing instructions (and optionally revision requests) and return a precise JSON array of edit operations.\n\nRULES:\n- If revisionInstructions is provided, intelligently MERGE them with the original editPrompt.\n  Example: if original says 'title at top' and revision says 'move title to center', override position to center.\n  Example: if revision says 'replace clip 2 with clip 4', generate a note in a 'clip_swap' operation.\n- ONLY return raw JSON array — no markdown, no backticks, no explanation.\n\nOperation types and required fields:\n\n{ type: 'title', text, start_sec, end_sec, position: 'top'|'center'|'bottom', fontsize (default 58), color (default 'white') }\n{ type: 'caption', text, start_sec, end_sec, position: 'top'|'center'|'bottom', fontsize (default 52), color (default 'yellow') }\n{ type: 'speed', clip_index (0-based), speed_factor (e.g. 1.5 for fast, 0.5 for slo-mo) }\n{ type: 'transition', after_clip (0-based), style: 'fade'|'wipeleft'|'wiperight'|'slideup'|'zoomin', duration (default 0.8) }\n{ type: 'clip_swap', from_index (0-based), to_index (0-based) }  <- reorder clips\n{ type: 'clip_remove', clip_index (0-based) }  <- remove a clip from the sequence\n{ type: 'fade', in_duration (default 0.8), out_duration (default 0.8) }\n{ type: 'music', volume (0.0-1.0, default 0.25) }\n\nAlways include at least a fade operation. Default to crossfade transitions between all clips."
+            },
+            {
+              "role": "user",
+              "content": "=Original Instructions:\n{{ $json.editPrompt }}\n\n{% if $json.isRevision %}REVISION REQUEST (apply on top of original, override where needed):\n{{ $json.revisionInstructions }}\n\nIteration: {{ $json.iteration }} / 10{% endif %}\n\nClip count: {{ $json.clipCount }}\nClip names: {{ $json.clipNames.join(', ') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ve-ai-parse",
+      "name": "🤖 AI: Parse + Merge Edit Instructions",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.7,
+      "position": [
+        -760,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "GYEac6uT6qXgEaPk",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the complete FFmpeg filter graph from AI-parsed edit operations\nconst aiRaw = $json.message?.content || $json.choices?.[0]?.message?.content || '[]';\nconst meta   = $('📋 Collect Clip Metadata').first().json;\nlet { clipCount, clipNames, watermark, musicId, run_id, iteration } = meta;\nwatermark = (watermark || '@MemesAdda').replace(/'/g, '');\n\nlet ops = [];\ntry {\n  let raw = aiRaw.trim().replace(/^```[a-z]*\\s*/i, '').replace(/\\s*```$/i, '');\n  ops = JSON.parse(raw);\n} catch(e) {\n  console.log('AI parse failed, using minimal defaults:', e.message);\n  ops = [{ type: 'fade', in_duration: 0.5, out_duration: 0.5 }];\n}\n\n// ── Apply clip_swap operations to reorder clips ─────────────────────────────\nlet clipOrder = Array.from({ length: clipCount }, (_, i) => i);\nfor (const op of ops) {\n  if (op.type === 'clip_swap') {\n    const fi = op.from_index, ti = op.to_index;\n    if (fi >= 0 && fi < clipOrder.length && ti >= 0 && ti < clipOrder.length) {\n      [clipOrder[fi], clipOrder[ti]] = [clipOrder[ti], clipOrder[fi]];\n    }\n  }\n}\n\n// ── Apply clip_remove operations ────────────────────────────────────────────\nconst removedIndices = new Set(ops.filter(o => o.type === 'clip_remove').map(o => o.clip_index));\nclipOrder = clipOrder.filter(i => !removedIndices.has(i));\nconst effectiveCount = clipOrder.length;\n\nif (effectiveCount === 0) throw new Error('All clips were removed. Nothing to render.');\n\n// ── Build per-clip speed map ─────────────────────────────────────────────────\nconst speedMap = {};\nfor (const op of ops) {\n  if (op.type === 'speed') speedMap[op.clip_index] = op.speed_factor || 1.0;\n}\n\n// ── Build transition map ─────────────────────────────────────────────────────\nconst transMap = {};\nfor (const op of ops) {\n  if (op.type === 'transition') transMap[op.after_clip] = op;\n}\n\n// ── Collect title/caption overlay ops ───────────────────────────────────────\nconst drawOps = ops.filter(o => ['title', 'caption'].includes(o.type));\n\n// ── Fade settings ────────────────────────────────────────────────────────────\nconst fadeOp   = ops.find(o => o.type === 'fade');\nconst fadeIn   = fadeOp?.in_duration  ?? 0.8;\nconst fadeOut  = fadeOp?.out_duration ?? 0.8;\n\n// ── Music volume ─────────────────────────────────────────────────────────────\nconst musicOp  = ops.find(o => o.type === 'music');\nconst musicVol = musicOp?.volume ?? 0.25;\n\n// ── Build FFmpeg filter_complex ──────────────────────────────────────────────\nconst filterParts = [];\nconst audioLabels = [];\n\n// Step 1: Scale + speed each EFFECTIVE clip (in reordered order)\nclipOrder.forEach((origIdx, pos) => {\n  const spd = speedMap[origIdx] || 1.0;\n  const spdFilter = spd !== 1.0 ? `,setpts=PTS/${spd}` : '';\n  filterParts.push(\n    `[${origIdx}:v]scale=1080:1920:force_original_aspect_ratio=decrease,` +\n    `pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30${spdFilter}[sv${pos}]`\n  );\n  const aFilt = spd !== 1.0\n    ? `[${origIdx}:a]atempo=${Math.min(2.0, Math.max(0.5, spd)).toFixed(2)}[sa${pos}]`\n    : `[${origIdx}:a]acopy[sa${pos}]`;\n  filterParts.push(aFilt);\n  audioLabels.push(`[sa${pos}]`);\n});\n\n// Step 2: Chain xfade transitions\nlet prevLabel = 'sv0';\nfor (let i = 1; i < effectiveCount; i++) {\n  const origIdx = clipOrder[i - 1];\n  const tr = transMap[origIdx] || transMap[i - 1] || { style: 'fade', duration: 0.8 };\n  const dur = tr.duration || 0.8;\n  const style = tr.style === 'zoomin' ? 'wipeleft' : (tr.style || 'fade');\n  const outLabel = i === effectiveCount - 1 ? 'xfout' : `xf${i}`;\n  filterParts.push(`[${prevLabel}][sv${i}]xfade=transition=${style}:duration=${dur}:offset=${i * 8}[${outLabel}]`);\n  prevLabel = outLabel;\n}\n\nconst afterJoin = effectiveCount === 1 ? 'sv0' : 'xfout';\n\n// Step 3: Fade in/out\nfilterParts.push(`[${afterJoin}]fade=in:st=0:d=${fadeIn},fade=out:st=30:d=${fadeOut}[faded]`);\n\n// Step 4: Watermark\nconst wmF = `drawtext=text='${watermark}':fontsize=36:fontcolor=white@0.85:x=w-text_w-20:y=20:box=1:boxcolor=0x00000066:boxborderw=8:shadowcolor=black:shadowx=2:shadowy=2`;\nfilterParts.push(`[faded]${wmF}[wmd]`);\n\n// Step 5: Titles + Captions chain\nlet curLabel = 'wmd';\ndrawOps.forEach((op, idx) => {\n  const txt  = (op.text || '').replace(/'/g, '');\n  const yMap = { top: '80', center: '(h-text_h)/2', bottom: 'h-180' };\n  const x    = '(w-text_w)/2';\n  const y    = yMap[op.position] || (op.type === 'title' ? '80' : 'h-180');\n  const fs   = op.fontsize || (op.type === 'title' ? 58 : 52);\n  const col  = op.color || (op.type === 'title' ? 'white' : 'yellow');\n  const ss   = op.start_sec || 0;\n  const se   = op.end_sec   || ss + 4;\n  const outL = idx === drawOps.length - 1 ? 'finalv' : `cap${idx}`;\n  filterParts.push(\n    `[${curLabel}]drawtext=text='${txt}':fontsize=${fs}:fontcolor=${col}:` +\n    `x=${x}:y=${y}:enable='between(t,${ss},${se})':` +\n    `box=1:boxcolor=0x000000bb:boxborderw=14:shadowcolor=black:shadowx=3:shadowy=3[${outL}]`\n  );\n  curLabel = outL;\n});\nif (drawOps.length === 0) filterParts.push(`[${curLabel}]copy[finalv]`);\n\n// Step 6: Audio mix\nif (musicId) {\n  filterParts.push(\n    `${audioLabels.join('')}concat=n=${effectiveCount}:v=0:a=1[concata];` +\n    `[concata][${clipCount}:a]amix=inputs=2:weights=1 ${musicVol}:normalize=0[finala]`\n  );\n} else {\n  filterParts.push(`${audioLabels.join('')}concat=n=${effectiveCount}:v=0:a=1[finala]`);\n}\n\nconst filterComplex = filterParts.join(';');\n\nreturn [{\n  json: {\n    filterComplex,\n    clipOrder,\n    effectiveCount,\n    watermark, musicId, run_id, iteration,\n    editOpsApplied: ops.length,\n    summaryOfChanges: ops.map(o => o.type).join(', ')\n  }\n}];"
+      },
+      "id": "ve-build-filter",
+      "name": "⚙️ Build FFmpeg Filter Graph",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/sh\nset -e\necho \"=== 🎬 AI Video Editor — Render v{{ $json.iteration }} ===\"\necho \"Clips in order: {{ $json.clipOrder.join(', ') }}\"\necho \"Effective clips: {{ $json.effectiveCount }}\"\necho \"Ops applied: {{ $json.editOpsApplied }}\"\n\nMUSIC_ID=\"{{ $json.musicId }}\"\nCLIP_ORDER=\"{{ $json.clipOrder.join(' ') }}\"\nEFFECTIVE_COUNT={{ $json.effectiveCount }}\n\n# Build input flags in clip order\nINPUTS=\"\"\nfor i in $CLIP_ORDER; do\n  INPUTS=\"$INPUTS -i /tmp/clip_$i.mp4\"\ndone\n\n# Add music if provided\nif [ -n \"$MUSIC_ID\" ]; then\n  INPUTS=\"$INPUTS -i /tmp/music.mp3\"\nfi\n\nrm -f /tmp/output.mp4\n\nFILTER='{{ $json.filterComplex }}'\n\neval \"ffmpeg -y $INPUTS \\\n  -filter_complex \\\"$FILTER\\\" \\\n  -map '[finalv]' \\\n  -map '[finala]' \\\n  -c:v libx264 -preset fast -crf 22 \\\n  -c:a aac -b:a 128k \\\n  -movflags +faststart \\\n  -shortest /tmp/output_v{{ $json.iteration }}.mp4\"\n\necho \"✅ Render v{{ $json.iteration }} complete!\"\nls -lh /tmp/output_v{{ $json.iteration }}.mp4"
+      },
+      "id": "ve-ffmpeg-render",
+      "name": "🔧 FFmpeg: Render",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "filePath": "=/tmp/output_v{{ $('⚙️ Build FFmpeg Filter Graph').item.json.iteration }}.mp4",
+        "options": {}
+      },
+      "id": "ve-read-output",
+      "name": "📖 Read Rendered Video",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ 'preview_' + $('⚙️ Build FFmpeg Filter Graph').item.json.run_id + '_v' + $('⚙️ Build FFmpeg Filter Graph').item.json.iteration + '.mp4' }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1IFkvmSJmL_5DLK1URAAicD8EZJ3oCbO5",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "ve-upload-preview",
+      "name": "☁️ Upload Preview to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        120,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "mode": "list",
+          "value": "13WzEh3NC6wcmRc6NhD66-orUBYtn3NWhq9xTsZJ0vjs"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Video Editor Queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $('⚙️ Build FFmpeg Filter Graph').item.json.run_id }}",
+            "iteration": "={{ $('⚙️ Build FFmpeg Filter Graph').item.json.iteration }}",
+            "status": "pending_approval",
+            "drive_link": "={{ $json.webViewLink }}",
+            "file_id": "={{ $json.id }}",
+            "ops_applied": "={{ $('⚙️ Build FFmpeg Filter Graph').item.json.summaryOfChanges }}",
+            "created_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ve-log-sheet",
+      "name": "📊 Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        340,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Lhskb1Dp4VDCJ05G",
+          "name": "Google Sheets account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=🎬 *AI Video Edit — Preview Ready!*\n*Version {{ $('⚙️ Build FFmpeg Filter Graph').item.json.iteration }}{% if $('⚙️ Build FFmpeg Filter Graph').item.json.iteration > 1 %} (Revised){% endif %}*\n\n📋 *Job ID (keep this!):* `{{ $('⚙️ Build FFmpeg Filter Graph').item.json.run_id }}`\n⚙️ *Operations applied:* {{ $('⚙️ Build FFmpeg Filter Graph').item.json.editOpsApplied }}\n🎞️ *Clips:* {{ $('⚙️ Build FFmpeg Filter Graph').item.json.clipOrder.join(' → ') }}\n🔧 *Changes:* {{ $('⚙️ Build FFmpeg Filter Graph').item.json.summaryOfChanges }}\n\n━━━━━━━━━━━━━━━━━━━━\n🎬 *Watch Preview:*\n{{ $('☁️ Upload Preview to Drive').item.json.webViewLink }}\n━━━━━━━━━━━━━━━━━━━━\n\n✅ *Happy? Click APPROVE:*\n{{ $execution.resumeUrl }}\n\n✏️ *Need changes? Open the revision form:*\n{{ $('🎬 Form: New Edit Job').params?.webhookId ? 'http://localhost:5678/webhook/ve-form-revision' : 'http://localhost:5678/form/ve-form-revision' }}\n*(Copy your Job ID above into the form)*\n\n❌ *Max revisions: {{ 10 - $('⚙️ Build FFmpeg Filter Graph').item.json.iteration }} remaining*",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "ve-telegram-preview",
+      "name": "📱 Telegram: Preview + Revision Options",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "ve-wait-approval",
+      "name": "⏳ Wait: Approve or Timeout",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "mode": "expression",
+          "value": "={{ $('📊 Log to Sheets').item.json.file_id }}"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1IFkvmSJmL_5DLK1URAAicD8EZJ3oCbO5",
+          "mode": "list"
+        },
+        "options": {
+          "name": "={{ 'FINAL_' + $('⚙️ Build FFmpeg Filter Graph').item.json.run_id + '_v' + $('⚙️ Build FFmpeg Filter Graph').item.json.iteration + '.mp4' }}"
+        }
+      },
+      "id": "ve-move-publish",
+      "name": "🚀 Move to Publish Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "mode": "list",
+          "value": "13WzEh3NC6wcmRc6NhD66-orUBYtn3NWhq9xTsZJ0vjs"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Video Editor Queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $('⚙️ Build FFmpeg Filter Graph').item.json.run_id }}",
+            "status": "approved",
+            "publish_link": "={{ $json.webViewLink }}",
+            "approved_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ve-sheet-approved",
+      "name": "✅ Sheet: Mark Approved",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1220,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Lhskb1Dp4VDCJ05G",
+          "name": "Google Sheets account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=✅ *Video Approved & Published!*\n\n🎬 *{{ $('⚙️ Build FFmpeg Filter Graph').item.json.run_id }}*\n📁 Final version (v{{ $('⚙️ Build FFmpeg Filter Graph').item.json.iteration }}) moved to Publish Folder:\n{{ $('🚀 Move to Publish Folder').item.json.webViewLink }}\n\n🚀 Your YouTube + Instagram publishing workflow will pick it up automatically!",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "ve-telegram-approved",
+      "name": "🎉 Telegram: Final Approved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "ve-error-trigger",
+      "name": "⚠️ Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=⚠️ *AI Video Editor — Error!*\n\n❌ *Failed node:* `{{ $json.execution.error.node?.name || 'Unknown' }}`\n🔴 *Error:* `{{ $json.execution.error.message || 'Unknown error' }}`\n🕐 {{ $now.toISO() }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "ve-error-telegram",
+      "name": "📱 Telegram: Error Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -2100,
+        500
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "🎬 Form: New Edit Job": {
+      "main": [
+        [
+          {
+            "node": "🔀 Route: New Job or Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✏️ Form: Request Changes": {
+      "main": [
+        [
+          {
+            "node": "🔀 Route: New Job or Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Route: New Job or Revision": {
+      "main": [
+        [
+          {
+            "node": "📂 List Clips from Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📂 List Clips from Drive": {
+      "main": [
+        [
+          {
+            "node": "🗂️ Filter & Sort Clips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗂️ Filter & Sort Clips": {
+      "main": [
+        [
+          {
+            "node": "⬇️ Download Clip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⬇️ Download Clip": {
+      "main": [
+        [
+          {
+            "node": "💾 Write Clip to /tmp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 Write Clip to /tmp": {
+      "main": [
+        [
+          {
+            "node": "📋 Collect Clip Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 Collect Clip Metadata": {
+      "main": [
+        [
+          {
+            "node": "🤖 AI: Parse + Merge Edit Instructions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 AI: Parse + Merge Edit Instructions": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Build FFmpeg Filter Graph",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Build FFmpeg Filter Graph": {
+      "main": [
+        [
+          {
+            "node": "🔧 FFmpeg: Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔧 FFmpeg: Render": {
+      "main": [
+        [
+          {
+            "node": "📖 Read Rendered Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read Rendered Video": {
+      "main": [
+        [
+          {
+            "node": "☁️ Upload Preview to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "☁️ Upload Preview to Drive": {
+      "main": [
+        [
+          {
+            "node": "📊 Log to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 Log to Sheets": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram: Preview + Revision Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Telegram: Preview + Revision Options": {
+      "main": [
+        [
+          {
+            "node": "⏳ Wait: Approve or Timeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Wait: Approve or Timeout": {
+      "main": [
+        [
+          {
+            "node": "🚀 Move to Publish Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚀 Move to Publish Folder": {
+      "main": [
+        [
+          {
+            "node": "✅ Sheet: Mark Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ Sheet: Mark Approved": {
+      "main": [
+        [
+          {
+            "node": "🎉 Telegram: Final Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚠️ Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram: Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null
+}

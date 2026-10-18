@@ -1,0 +1,18 @@
+============================================================
+Checklist: Simplified YouTube Upload Node Config
+============================================================
+
+1. General Parameters:
+   - Resource: Video
+   - Operation: Upload
+   - Title: {{ $json.youtubeTitle }}
+   - Description: {{ $json.youtubeDescription }}
+   - Input Binary Field: data
+
+2. Options (Click "Add Option" inside the node):
+   - Privacy Status: unlisted
+   - Tags: {{ $json.youtubeTags }}
+   - Default Language: {{ $json.defaultLanguage }}
+
+3. Credentials:
+   - Select your "YouTube ai veo3" credential from the dropdown list.

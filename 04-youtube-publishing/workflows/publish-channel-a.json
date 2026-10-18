@@ -1,0 +1,517 @@
+{
+  "id": "2",
+  "name": "CHANNEL A — Personal Videos: Auto-Publish to YouTube + Instagram",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## CHANNEL A — Your Personal Recorded Videos\n\nCredentials needed:\n- Google Drive OAuth2 — Account A\n- YouTube OAuth2    — Account A\n- Postiz API Key   — Instagram Account A\n- Google Gemini API (shared)\n- Telegram Bot (shared)\n\nFolder watched: <<<CHANNEL_A_DRIVE_FOLDER_ID>>>\nThis folder is fed by: videoEditing.json (Workflow 1)",
+        "height": 240,
+        "width": 600,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        100,
+        160
+      ],
+      "typeVersion": 1,
+      "id": "sticky-personal",
+      "name": "Sticky Note — Channel A"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": "<<<CHANNEL_A_DRIVE_FOLDER_ID>>>"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "wf-a-trigger",
+      "name": "Google Drive Trigger (Channel A)",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "position": [
+        100,
+        400
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<<<ACCOUNT_A_DRIVE_CRED_ID>>>",
+          "name": "Google Drive — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const file = items[0].json;\nconst filename = file.name || \"Untitled Video\";\nconst title = filename.substring(0, filename.lastIndexOf('.')) || filename;\nreturn [{\n  json: {\n    ...file,\n    videoTitle: title,\n    channel: 'Personal Channel A'\n  }\n}];"
+      },
+      "id": "wf-a-extract-title",
+      "name": "Extract Title (A)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        300,
+        400
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "wf-a-download",
+      "name": "Download Video from Drive (A)",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        500,
+        400
+      ],
+      "typeVersion": 3,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<<<ACCOUNT_A_DRIVE_CRED_ID>>>",
+          "name": "Google Drive — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate video social media assets for the title: {{ $('Extract Title (A)').item.json.videoTitle }}",
+        "options": {
+          "systemMessage": "You are an expert viral content strategist and YouTube/Instagram SEO optimizer.\nBased on the video title, you will generate high-performing assets optimized for maximum reach, CTR, and virality.\n\nYour response MUST be a single raw JSON object without markdown code blocks, structured as follows:\n{\n  \"youtubeTitle\": \"A high-CTR title (max 70 chars) using power words, curiosity gaps, or a strong hook.\",\n  \"youtubeDescription\": \"An optimized description structure:\\n1. Strong Hook (first 2 lines before 'show more' to capture audience attention)\\n2. Brief Summary explaining what they will learn\\n3. Call to Action (Subscribe, comment, like)\\n4. Relevant keywords/SEO tags integrated naturally.\",\n  \"youtubeTags\": \"viral, tags, comma, separated, tech, trending, short form\",\n  \"instagramCaption\": \"🚨 VIRAL HOOK (First 3 seconds value statement)\\n\\nBody text with value-packed short bullet points. Use dynamic, punchy emojis. Ends with an engaging question to drive comments (Engagement loop).\",\n  \"instagramHashtags\": \"#trending #viral #foryou #ai #productivity [and 9 other relevant niche tags]\",\n  \"thumbnailPrompt\": \"An emotionally charged, high-contrast thumbnail. Features a central human subject showing a dramatic facial expression (shock, disbelief, intense focus, or excitement) reacting to the main theme of the video. Ultra-realistic, cinematic lighting with vibrant neon accents (red, blue, or yellow), shallow depth of field, bold colors, optimized for high click-through rate (CTR), 1280x720, clear readable focus without tiny text.\"\n}"
+        }
+      },
+      "id": "wf-a-caption-agent",
+      "name": "Caption Agent (A)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        700,
+        400
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "id": "wf-a-gemini",
+      "name": "Google Gemini Chat Model (A)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        620,
+        600
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<<<GEMINI_API_CRED_ID>>>",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawOutput = items[0].json.output;\nconst cleanOutput = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();\nconst data = JSON.parse(cleanOutput);\nreturn [{\n  json: {\n    ...items[0].json,\n    ...data\n  }\n}];"
+      },
+      "id": "wf-a-parse",
+      "name": "Parse Gemini JSON (A)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1700,
+        400
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "=https://image.pollinations.ai/prompt/{{ encodeURIComponent($json.thumbnailPrompt) }}",
+        "responseFormat": "file",
+        "outputBinaryFieldName": "thumbnailBinary",
+        "options": {}
+      },
+      "id": "wf-a-thumbnail",
+      "name": "Download Thumbnail (A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1900,
+        400
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "wf-a-merge",
+      "name": "Merge Video and Thumbnail (A)",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        2100,
+        400
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "chatId": "<<<TELEGRAM_CHAT_ID>>>",
+        "text": "=🎥 *CHANNEL A — Personal Video Ready to Post!*\n\n📌 *YouTube Title*: {{ $json.youtubeTitle }}\n\n📝 *YouTube Description*:\n{{ $json.youtubeDescription }}\n\n🏷️ *Tags*: {{ $json.youtubeTags }}\n\n📸 *Instagram Caption*:\n{{ $json.instagramCaption }} {{ $json.instagramHashtags }}\n\n🖼️ *Thumbnail Preview*:\nhttps://image.pollinations.ai/prompt/{{ encodeURIComponent($json.thumbnailPrompt) }}\n\n✅ *Click to APPROVE and publish to CHANNEL A:*\n{{ $execution.resumeUrl }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "wf-a-telegram",
+      "name": "Telegram Verification (A)",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        2300,
+        400
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "telegramApi": {
+          "id": "<<<TELEGRAM_CRED_ID>>>",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "wf-a-wait",
+      "name": "Wait for Approval (A)",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        2500,
+        400
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "operation": "publishVideo",
+        "videoUrl": "={{ $json.webContentLink }}",
+        "caption": "={{ $json.instagramCaption }}\n\n{{ $json.instagramHashtags }}"
+      },
+      "type": "n8n-nodes-base.instagram",
+      "typeVersion": 1,
+      "position": [
+        2700,
+        300
+      ],
+      "id": "wf-a-instagram-free",
+      "name": "Post to Instagram (Free)",
+      "credentials": {
+        "instagramBusinessApi": {
+          "id": "<<<INSTAGRAM_A_CRED_ID>>>",
+          "name": "Instagram Business — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "title": "={{ $json.youtubeTitle }}",
+        "description": "={{ $json.youtubeDescription }}",
+        "binaryPropertyName": "data",
+        "options": {
+          "tags": "={{ $json.youtubeTags }}"
+        }
+      },
+      "id": "wf-a-youtube",
+      "name": "YouTube Upload (A)",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        2700,
+        500
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "<<<YOUTUBE_A_CRED_ID>>>",
+          "name": "YouTube OAuth2 — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const upload = $('YouTube Upload (A)').first();\nconst thumb = $('Download Thumbnail (A)').first();\nreturn [{\n  json: { id: upload.json.id },\n  binary: thumb ? thumb.binary : {}\n}];"
+      },
+      "id": "wf-a-attach-thumb",
+      "name": "Attach Thumbnail Binary (A)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        2850,
+        500
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "resource": "thumbnail",
+        "videoId": "={{ $json.id }}",
+        "binaryPropertyName": "thumbnailBinary"
+      },
+      "id": "wf-a-thumbnail-upload",
+      "name": "YouTube Thumbnail (A)",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        3050,
+        500
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "<<<YOUTUBE_A_CRED_ID>>>",
+          "name": "YouTube OAuth2 — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        860
+      ],
+      "id": "wf-a-error-trigger",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $env.GEMINI_API_KEY || '<<<YOUR_GEMINI_API_KEY>>>' }}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Explain the following technical error message like I am 5 years old (ELI5). Be concise (1-2 sentences) and tell me exactly what action I should take to fix it:\\n\\n{{ JSON.stringify($json.execution.error) }}\"\n    }]\n  }]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        860
+      ],
+      "id": "wf-a-error-explain",
+      "name": "ELI5 Error Explain (A)"
+    },
+    {
+      "parameters": {
+        "chatId": "<<<TELEGRAM_CHAT_ID>>>",
+        "text": "=⚠️ *Workflow Personal (Channel A) Error!*\n\n🔴 *What went wrong (ELI5):*\n{{ $json.candidates[0].content.parts[0].text }}\n\n🔧 *Technical Error Details:* `{{ $('Error Trigger').item.json.execution.error.message }}`",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        500,
+        860
+      ],
+      "id": "wf-a-error-telegram",
+      "name": "Telegram Alert (A)",
+      "credentials": {
+        "telegramApi": {
+          "id": "<<<TELEGRAM_CRED_ID>>>",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger (Channel A)": {
+      "main": [
+        [
+          {
+            "node": "Extract Title (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Title (A)": {
+      "main": [
+        [
+          {
+            "node": "Download Video from Drive (A)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Caption Agent (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video from Drive (A)": {
+      "main": [
+        [
+          {
+            "node": "Merge Video and Thumbnail (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model (A)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Caption Agent (A)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Caption Agent (A)": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini JSON (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini JSON (A)": {
+      "main": [
+        [
+          {
+            "node": "Download Thumbnail (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Thumbnail (A)": {
+      "main": [
+        [
+          {
+            "node": "Merge Video and Thumbnail (A)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Video and Thumbnail (A)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Verification (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Verification (A)": {
+      "main": [
+        [
+          {
+            "node": "Wait for Approval (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Approval (A)": {
+      "main": [
+        [
+          {
+            "node": "Post to Instagram (Free)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "YouTube Upload (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Instagram (Free)": {
+      "main": [
+        []
+      ]
+    },
+    "YouTube Upload (A)": {
+      "main": [
+        [
+          {
+            "node": "Attach Thumbnail Binary (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Thumbnail Binary (A)": {
+      "main": [
+        [
+          {
+            "node": "YouTube Thumbnail (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "ELI5 Error Explain (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ELI5 Error Explain (A)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "0c360c25e8e9ea06a7e37afd5948ea7611f41c464c2d9455a692de1056a78ed6"
+  }
+}

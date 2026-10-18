@@ -1,0 +1,406 @@
+{
+  "id": "1",
+  "name": "Auto-Caption & Autopost Videos to Instagram & YouTube",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": "<<<GOOGLE_DRIVE_FOLDER_ID>>>"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "c6d72d40-6234-4cd7-835b-d947c0d132f2",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "position": [
+        100,
+        400
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const file = items[0].json;\nconst filename = file.name || \"Untitled Video\";\nconst title = filename.substring(0, filename.lastIndexOf('.')) || filename;\nreturn [{\n  json: {\n    ...file,\n    videoTitle: title\n  }\n}];"
+      },
+      "id": "extract-title-id",
+      "name": "Extract Title",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        300,
+        400
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "b2b8ef96-0636-4836-87cf-a4d1da8d59bc",
+      "name": "Download Video from Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        500,
+        400
+      ],
+      "typeVersion": 3,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "XXf8tW6s8Yqv40eV",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate video social media assets for the title: {{ $('Extract Title').item.json.videoTitle }}",
+        "options": {
+          "systemMessage": "You are an expert AI creator assistant.\nBased on the video title, you will generate optimized metadata for uploading the video to both YouTube and Instagram.\nYou must output a single, raw, valid JSON object with the following keys and no other text (do not wrap in markdown ```json blocks):\n{\n  \"youtubeTitle\": \"An engaging, clickable YouTube video title (max 70 characters)\",\n  \"youtubeDescription\": \"A detailed YouTube video description including chapters, key takeaways, and CTAs to subscribe\",\n  \"youtubeTags\": \"automation, n8n, instagram, youtube, tutorial, tech\",\n  \"instagramCaption\": \"A punchy, viral-style Instagram caption with emojis\",\n  \"instagramHashtags\": \"#automation #n8n #instagram #youtube #tech #viral\",\n  \"thumbnailPrompt\": \"A highly descriptive, detailed prompt for generating a YouTube thumbnail on Pollinations.ai. Include styling like 'vibrant, 3D render, digital art, high resolution, matching the topic of [topic]'\"\n}"
+        }
+      },
+      "id": "caption-agent-id",
+      "name": "Caption Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        700,
+        400
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "id": "gemini-model-id",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        620,
+        600
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawOutput = items[0].json.output;\nconst cleanOutput = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();\nconst data = JSON.parse(cleanOutput);\nreturn [{\n  json: {\n    ...items[0].json,\n    ...data\n  }\n}];"
+      },
+      "id": "parse-gemini-id",
+      "name": "Parse Gemini JSON",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1700,
+        400
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "=https://image.pollinations.ai/prompt/{{ encodeURIComponent($json.thumbnailPrompt) }}",
+        "responseFormat": "file",
+        "outputBinaryFieldName": "thumbnailBinary",
+        "options": {}
+      },
+      "id": "download-thumbnail-id",
+      "name": "Download Thumbnail",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1900,
+        400
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-id",
+      "name": "Merge Video and Thumbnail",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        2100,
+        400
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "chatId": "<<<TELEGRAM_CHAT_ID>>>",
+        "text": "=🔔 *Verification Request: Ready to Upload!*\n\n🎥 *Proposed YouTube Title*: {{ $json.youtubeTitle }}\n\n📝 *YouTube Description*:\n{{ $json.youtubeDescription }}\n\n🏷️ *YouTube Tags*: {{ $json.youtubeTags }}\n\n📸 *Instagram Caption*:\n{{ $json.instagramCaption }} {{ $json.instagramHashtags }}\n\n🖼️ *Generated Thumbnail*:\nhttps://image.pollinations.ai/prompt/{{ encodeURIComponent($json.thumbnailPrompt) }}\n\n👉 Click here to approve and post to both platforms:\n{{ $execution.resumeUrl }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-id",
+      "name": "Telegram Verification",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        2300,
+        400
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "wait-approval-id",
+      "name": "Wait for Approval",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        2500,
+        400
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.postiz.com/public/v1/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "39769767-7505-4b8e-ae49-427db12a303b",
+      "name": "Upload to Postiz",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        2700,
+        300
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.postiz.com/public/v1/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"now\",\n  \"shortLink\": false,\n  \"date\": \"{{ new Date($now).toISOString() }}\",\n  \"tags\": [],\n  \"posts\": [\n    {\n      \"integration\": { \"id\": \"cmeku38qa00cpo90yfw4ai6lt\" },\n      \"value\": [\n        {\n          \"content\": \"{{ $json.instagramCaption }}\\n\\n{{ $json.instagramHashtags }}\",\n          \"image\": [\n            {\n              \"id\": \"{{ $node['Upload to Postiz'].json.id }}\",\n              \"path\": \"{{ $node['Upload to Postiz'].json.path }}\"\n            }\n          ]\n        }\n      ],\n      \"settings\": {\n        \"post_type\": \"post\"\n      }\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "id": "abf93696-b602-4032-94e8-e58f2b8f85ec",
+      "name": "Post to Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        2900,
+        300
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "title": "={{ $json.youtubeTitle }}",
+        "description": "={{ $json.youtubeDescription }}",
+        "binaryPropertyName": "data",
+        "options": {
+          "tags": "={{ $json.youtubeTags }}"
+        }
+      },
+      "id": "youtube-upload-id",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        2700,
+        500
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "thumbnail",
+        "videoId": "={{ $json.id }}",
+        "binaryPropertyName": "thumbnailBinary"
+      },
+      "id": "youtube-thumbnail-id",
+      "name": "YouTube Thumbnail",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        2900,
+        500
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Title",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Title": {
+      "main": [
+        [
+          {
+            "node": "Download Video from Drive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Caption Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video from Drive": {
+      "main": [
+        [
+          {
+            "node": "Merge Video and Thumbnail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Caption Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Caption Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini JSON": {
+      "main": [
+        [
+          {
+            "node": "Download Thumbnail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Thumbnail": {
+      "main": [
+        [
+          {
+            "node": "Merge Video and Thumbnail",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Video and Thumbnail": {
+      "main": [
+        [
+          {
+            "node": "Telegram Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Verification": {
+      "main": [
+        [
+          {
+            "node": "Wait for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Approval": {
+      "main": [
+        [
+          {
+            "node": "Upload to Postiz",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "YouTube Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Postiz": {
+      "main": [
+        [
+          {
+            "node": "Post to Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Upload": {
+      "main": [
+        [
+          {
+            "node": "YouTube Thumbnail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "0c360c25e8e9ea06a7e37afd5948ea7611f41c464c2d9455a692de1056a78ed6"
+  }
+}

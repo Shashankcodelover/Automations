@@ -1,0 +1,163 @@
+# ============================================================
+#   WORKFLOW 3 — PUBLISH GUIDE
+#   File: workflow.json
+#   Platforms: YouTube + Instagram (simultaneously)
+# ============================================================
+#
+#   PURPOSE
+#   -------
+#   Detects a new video file uploaded to a Google Drive folder.
+#   Auto-generates captions, hashtags, a thumbnail, and sends
+#   you a Telegram preview for approval before publishing.
+#   On approval: publishes to YouTube AND Instagram at once.
+#
+#   This is the FINAL step of the pipeline.
+#   Feed output from Workflow 1 or Workflow 2 into this.
+#
+# ============================================================
+
+## HOW IT WORKS — STEP BY STEP
+
+   ┌──────────────────────────────────────────────────────┐
+   │  TRIGGER                                             │
+   │  Google Drive Trigger                                │
+   │    - Watches a specific folder (set your folder ID)  │
+   │    - Fires when a NEW video is uploaded              │
+   │    - Polls every minute                              │
+   └──────────────────────────────────────────────────────┘
+         ↓
+   ┌──────────────────────────────────────────────────────┐
+   │  STEP 1 — TITLE EXTRACTION                           │
+   │  Extract Title (Code node)                           │
+   │    - Reads the filename of the uploaded video        │
+   │    - Removes the file extension (.mp4)               │
+   │    - Example: "My AI Tools Review.mp4"               │
+   │              → title = "My AI Tools Review"          │
+   └──────────────────────────────────────────────────────┘
+         ↓
+   ┌──────────────────────────────────────────────────────┐
+   │  STEP 2 — AUTO CAPTIONING                            │
+   │  Post to Submagic + Wait/Poll loop                   │
+   │    - Sends video to Submagic API                     │
+   │    - Submagic adds styled text captions to the video │
+   │    - Template used: "Hormozi 2"                      │
+   │    - Polls every 15 seconds until captioning is done │
+   │    - Downloads the finished captioned video          │
+   └──────────────────────────────────────────────────────┘
+         ↓
+   ┌──────────────────────────────────────────────────────┐
+   │  STEP 3 — AI METADATA GENERATION                     │
+   │  Caption Agent (Google Gemini 1.5 Flash — FREE)      │
+   │    Generates all of these from the video title:      │
+   │                                                      │
+   │    youtubeTitle        → clickable, max 70 chars     │
+   │    youtubeDescription  → full description + CTA      │
+   │    youtubeTags         → comma-separated tag string  │
+   │    instagramCaption    → punchy caption with emojis  │
+   │    instagramHashtags   → 12 relevant hashtags        │
+   │    thumbnailPrompt     → image generation prompt     │
+   └──────────────────────────────────────────────────────┘
+         ↓
+   ┌──────────────────────────────────────────────────────┐
+   │  STEP 4 — THUMBNAIL GENERATION                       │
+   │  Download Thumbnail (HTTP Request node)              │
+   │    - Calls Pollinations.ai with the thumbnail prompt │
+   │    - Pollinations.ai is 100% FREE, no API key        │
+   │    - Returns a generated thumbnail image             │
+   │    - URL: https://image.pollinations.ai/prompt/{...} │
+   └──────────────────────────────────────────────────────┘
+         ↓
+   ┌──────────────────────────────────────────────────────┐
+   │  STEP 5 — TELEGRAM VERIFICATION (YOU VALIDATE HERE)  │
+   │  Telegram Verification node                          │
+   │    Sends you a message with:                         │
+   │      🎥 YouTube Title                                │
+   │      📝 YouTube Description                          │
+   │      🏷️ YouTube Tags                               │
+   │      📸 Instagram Caption + Hashtags                 │
+   │      🖼️ Thumbnail preview link                      │
+   │      👉 ONE-CLICK APPROVE LINK                       │
+   │                                                      │
+   │  "Wait for Approval" node pauses the workflow.       │
+   │  Nothing is published until you click the link.      │
+   │                                                      │
+   │  HOW TO VALIDATE BEFORE APPROVING:                   │
+   │    1. Click the thumbnail link → check image         │
+   │    2. Read the title + description in the message    │
+   │    3. If happy → click the Approve link              │
+   │    4. If not happy → do not click, run workflow again│
+   └──────────────────────────────────────────────────────┘
+         ↓  (you click Approve)
+   ┌──────────────────────────────────────────────────────┐
+   │  STEP 6 — SIMULTANEOUS PUBLISH                       │
+   │                                                      │
+   │  ┌──────────────────┐   ┌──────────────────────────┐ │
+   │  │ YouTube Upload    │   │ Upload to Postiz (IG)    │ │
+   │  │  - video file     │   │  - video file            │ │
+   │  │  - title          │   │  - caption + hashtags    │ │
+   │  │  - description    │   │  - posts immediately     │ │
+   │  │  - tags           │   └──────────────────────────┘ │
+   │  │       ↓           │                                 │
+   │  │ YouTube Thumbnail │                                 │
+   │  │  - uploads the    │                                 │
+   │  │    generated image│                                 │
+   │  └──────────────────┘                                 │
+   └──────────────────────────────────────────────────────┘
+
+---
+
+## REQUIRED SETUP — WHAT TO FILL IN
+
+   ┌──────────────────────────────────────────────────────┐
+   │  Google Drive Trigger node:                          │
+   │    folderToWatch > value: "<<<GOOGLE_DRIVE_FOLDER_ID>"│
+   │    → Replace with your Drive folder ID               │
+   │    → Get it from the folder URL after /folders/      │
+   │                                                      │
+   │  Submagic API (HTTP Header Auth credential):         │
+   │    Header name: Authorization                        │
+   │    Value: Token YOUR_SUBMAGIC_API_KEY                │
+   │    → Get from: https://www.submagic.co/api           │
+   │                                                      │
+   │  Google Gemini credential:                           │
+   │    Free API key from https://aistudio.google.com     │
+   │                                                      │
+   │  Telegram node:                                      │
+   │    Bot Token: from @BotFather on Telegram            │
+   │    Chat ID:   from @userinfobot on Telegram          │
+   │    chatId field: replace <<<TELEGRAM_CHAT_ID>>>      │
+   │                                                      │
+   │  Postiz API (Instagram):                             │
+   │    Header Auth credential with your Postiz API key   │
+   │    Integration ID: update in "Post to Instagram" node│
+   │                                                      │
+   │  YouTube OAuth2:                                     │
+   │    Connect your Google/YouTube account via OAuth2    │
+   └──────────────────────────────────────────────────────┘
+
+---
+
+## YOUR VIDEO TITLE = YOUR FILENAME
+
+   You do NOT need to type a title manually.
+   The workflow reads the filename of the video you upload.
+   
+   Examples:
+     "AI Tools Review 2025.mp4"  → title = "AI Tools Review 2025"
+     "My Screen Recording.mp4"   → title = "My Screen Recording"
+   
+   Name your files descriptively before uploading to Drive.
+
+---
+
+## CONNECTING FROM WORKFLOW 1 or WORKFLOW 2
+
+   Workflow 1 output:
+   → Add a Google Drive Upload node at the end
+   → Upload to the same folder this workflow watches
+
+   Workflow 2 output:
+   → Change the "Upload file" destination folder
+     to match the folder watched here
+
+   Both feed into this workflow automatically.

@@ -1,0 +1,204 @@
+# ============================================================
+#   WORKFLOW 1 — VIDEO EDITING GUIDE
+#   File: videoEditing.json
+#   Engine: fal.ai ffmpeg API  (https://fal.ai)
+# ============================================================
+#
+#   PURPOSE
+#   -------
+#   You upload your own raw recorded clips (face cam, screen
+#   recordings, short clips) and this workflow:
+#     1. Reads each clip's duration automatically
+#     2. Builds a video timeline
+#     3. Stitches clips together with transitions
+#     4. Adds background music
+#     5. Outputs a single finished .mp4
+#
+# ============================================================
+
+## STEP 1 — HOW TO UPLOAD YOUR VIDEOS
+
+   Platform used: Airtable (free account)
+   
+   Setup steps:
+   ┌──────────────────────────────────────────────────────┐
+   │  1. Go to https://airtable.com and create a base      │
+   │  2. Create a table called "Video Clips"               │
+   │  3. Add a column of type "Attachment" — call it "File"│
+   │  4. Upload your raw .mp4 clips into rows              │
+   │  5. Create another table called "Background Music"    │
+   │  6. Add "Attachment" column — call it "Audio File"    │
+   │  7. Upload your background .mp3 track there           │
+   └──────────────────────────────────────────────────────┘
+   
+   In the n8n workflow:
+     "Grab Video Files" node  →  set your Airtable base + table ID
+     Limit = 3  (means it grabs the 3 most recent clips)
+
+---
+
+## STEP 2 — HOW THE TIMELINE WORKS
+
+   The timeline is built automatically by the "Code" node.
+   Here is exactly what it does (plain English):
+
+   ┌──────────────────────────────────────────────────────┐
+   │  Clip 1:  starts at  0s,   duration = 10s            │
+   │  Clip 2:  starts at  10s,  duration = 8s             │
+   │  Clip 3:  starts at  18s,  duration = 12s            │
+   │  Total video = 30 seconds                            │
+   └──────────────────────────────────────────────────────┘
+
+   The durations come from the fal.ai /metadata API which
+   reads the actual length of each clip you uploaded.
+   You do NOT need to set timestamps manually.
+
+   To TRIM a clip (cut it shorter):
+   ─────────────────────────────────
+   Edit the Code node. Change the keyframe to add a
+   "trim_start" and "trim_end" value. Example:
+   
+     {
+       url: "https://...",
+       timestamp: 0,
+       duration: 5,
+       trim_start: 2,   ← skip the first 2 seconds
+       trim_end: 7      ← end at 7 seconds of original
+     }
+
+   To REORDER clips:
+   ─────────────────
+   Just reorder the rows in Airtable before running.
+   The workflow picks them in the order they appear.
+
+---
+
+## STEP 3 — HOW TRANSITIONS WORK
+
+   Transitions are applied at the join points between clips.
+   The fal.ai /compose API supports these effects:
+
+   ┌─────────────────────────────────────────────────────┐
+   │  "transition": "fade"          → fade to black      │
+   │  "transition": "crossfade"     → smooth blend       │
+   │  "transition": "wipe_left"     → wipe from right    │
+   │  "transition": "wipe_right"    → wipe from left     │
+   │  "transition": "zoom_in"       → push zoom in       │
+   └─────────────────────────────────────────────────────┘
+
+   To add transitions, edit the Code node and add a
+   "transition" field to each keyframe:
+
+     {
+       url: "https://...",
+       timestamp: 10,
+       duration: 8,
+       transition: "crossfade",       ← add this line
+       transitionDuration: 0.5        ← 0.5 seconds blend
+     }
+
+   At what points are they applied?
+   → At the END of each clip (the join point to the next).
+   → You decide per clip — different clips can have different
+     transitions.
+
+---
+
+## STEP 4 — HOW BACKGROUND MUSIC WORKS
+
+   The music is fetched from your Airtable "Background Music"
+   table by the "Grab Music File" node.
+
+   How it merges:
+   ┌─────────────────────────────────────────────────────┐
+   │  Combined video  ──────────────────────────────────→│
+   │  Audio track (music)  ─────────────────────────────→│
+   │                 fal.ai /merge-audio-video            │
+   │                        ↓                             │
+   │       Final video with music layered in              │
+   └─────────────────────────────────────────────────────┘
+
+   Notes:
+   - Music runs for the full video duration
+   - Music volume is NOT ducked by default (no auto-adjust)
+   - To change the music, upload a different file to Airtable
+     or update the record ID in the "Grab Music File" node
+
+---
+
+## STEP 5 — HOW TO VALIDATE THE OUTPUT VIDEO
+
+   Method 1 — Check the final node output:
+   ─────────────────────────────────────────
+   The last node "HTTP Request" downloads the final video.
+   Right-click the node → "Open Binary Data" → watch it.
+
+   Method 2 — Add a Telegram send node at the end:
+   ──────────────────────────────────────────────────
+   Connect a Telegram node after "Get Video Data2" to send
+   yourself the video URL. You can watch it on your phone
+   before passing to Workflow 3 for publishing.
+
+   Method 3 — Google Drive upload:
+   ─────────────────────────────────
+   Add a Google Drive upload node at the end (like in
+   Workflow 2). The video gets saved to your Drive where
+   you can preview it, and it then triggers Workflow 3.
+
+---
+
+## REQUIRED SETUP — WHAT TO FILL IN
+
+   In the n8n editor, replace these placeholders:
+
+   ┌──────────────────────────────────────────────────────┐
+   │  All HTTP Request nodes:                             │
+   │    Authorization: "key {YOUR KEY HERE}"              │
+   │    → Replace with your fal.ai API key                │
+   │    → Format: "key fal_xxxxxxxxxxxx"                  │
+   │                                                      │
+   │  "Grab Video Files" node:                            │
+   │    base > value: ""  → your Airtable Base ID         │
+   │    table > value: "" → your Video Clips table ID     │
+   │                                                      │
+   │  "Grab Music File" node:                             │
+   │    id: "recg1mhqxkJ5eb8C3"  → change to your record │
+   └──────────────────────────────────────────────────────┘
+
+---
+
+## CONNECTING TO WORKFLOW 3 (Publishing)
+
+   After the final video is ready:
+   1. Add a "Google Drive Upload" node at the end
+   2. Upload the output video to the Google Drive folder
+      that Workflow 3 watches
+   3. Workflow 3 auto-detects it and starts the
+      caption → thumbnail → Telegram → publish pipeline
+
+---
+
+## FFMPEG SELF-HOST SETUP (already included in this guide)
+
+   Your docker-compose.yml uses the standard n8n image.
+   To use ffmpeg directly inside n8n (for the Execute
+   Command node), rebuild with ffmpeg installed:
+
+   Create a file called  Dockerfile  in the n8n/ folder:
+
+     FROM n8nio/n8n:latest
+     USER root
+     RUN apk add --no-cache ffmpeg
+     USER node
+
+   Then in docker-compose.yml change:
+     image: docker.n8n.io/n8nio/n8n
+   to:
+     image: n8n-with-ffmpeg:latest
+
+   Rebuild:
+     docker build -t n8n-with-ffmpeg:latest .
+     docker compose up -d
+
+   Test (in an "Execute Command" node):
+     ffmpeg -version

@@ -1,0 +1,79 @@
+# ============================================================
+#   CHANNEL A & CHANNEL B CONFIGURATION CHECKLIST
+#   This is your 100% Free Setup copy-paste cheat sheet.
+# ============================================================
+
+## 📂 STEP 1: CREATE 2 GOOGLE DRIVE FOLDERS
+Go to Google Drive and create two folders:
+1. Folder A (name it: "Channel A — Ready to Publish")
+2. Folder B (name it: "Channel B — Ready to Publish")
+
+Double-click each folder and copy the ID from the browser address bar:
+https://drive.google.com/drive/folders/<<<THIS_IS_THE_ID>>>
+
+---
+
+## 📸 CHANNEL A (Your Recorded Videos) — WHAT TO CONFIG
+
+### Workflow 1: videoEditingLocal.json (Local Free Editor)
+Open this workflow in n8n and set:
+1. **"Grab Video Files (Local)" node**:
+   - Airtable Credential: Select your Airtable Token
+   - Base & Table: Choose your Video clips base/table
+2. **"Grab Music File (Local)" node**:
+   - Base & Table: Choose your Music base/table
+   - ID: Select your background audio record ID
+3. **"Upload to Publish Folder" node**:
+   - Google Drive Credential: Select `Google Drive — Account A`
+   - Folder ID: `FOLDER_A_ID`
+
+### Workflow 3: workflow-personal.json (Publish Channel A)
+Open this workflow in n8n and set:
+1. **"Google Drive Trigger (Channel A)" node**:
+   - Google Drive Credential: Select `Google Drive — Account A`
+   - Folder to Watch: `FOLDER_A_ID`
+2. **"Telegram Verification (A)" node**:
+   - Chat ID: `YOUR_TELEGRAM_CHAT_ID`
+3. **"Post to Instagram (Free)" node**:
+   - Instagram Credential: Select `Instagram Business — Account A`
+4. **"YouTube Upload (A)" and "YouTube Thumbnail (A)" nodes**:
+   - YouTube Credential: Select `YouTube OAuth2 — Account A`
+
+---
+
+## 🤖 CHANNEL B (AI-Generated Videos) — WHAT TO CONFIG
+
+### Workflow 2: veo 3 __ n8n automation.json (AI Video Generator)
+Open this workflow in n8n and set:
+1. **"Vertex AI-VEO" and "Vertex AI-fetch" nodes**:
+   - Authentication: Predefined Credential Type
+   - Credential Type: Google API
+   - Credential: Select `Google Vertex AI — Channel B` (Your Service Account Key JSON)
+2. **"Upload file" node**:
+   - Google Drive Credential: Select `Google Drive — Account B`
+   - Folder ID: `FOLDER_B_ID`
+3. **"Telegram — AI Video Preview" node**:
+   - Chat ID: `YOUR_TELEGRAM_CHAT_ID`
+4. **"Log the Idea" and "Log Final Video" nodes**:
+   - Google Sheets Credential: Select `Google Sheets — Account B`
+
+### Workflow 4: workflow-ai.json (Publish Channel B)
+Open this workflow in n8n and set:
+1. **"Google Drive Trigger (Channel B)" node**:
+   - Google Drive Credential: Select `Google Drive — Account B`
+   - Folder to Watch: `FOLDER_B_ID`
+2. **"Telegram Verification (B)" node**:
+   - Chat ID: `YOUR_TELEGRAM_CHAT_ID`
+3. **"Post to Instagram (Free)" node**:
+   - Instagram Credential: Select `Instagram Business — Account B`
+4. **"YouTube Upload (B)" and "YouTube Thumbnail (B)" nodes**:
+   - YouTube Credential: Select `YouTube OAuth2 — Account B`
+
+---
+
+## 🔑 WHERE TO GET YOUR FREE KEYS
+- **Telegram Bot Tokens**: Message `@BotFather` on Telegram.
+- **Telegram Chat ID**: Message `@userinfobot` on Telegram.
+- **Gemini API Keys**: Get from https://aistudio.google.com
+- **Instagram Business OAuth**: Log in with your Facebook account connected to your Instagram page directly inside the n8n credential setup window!
+- **Google Service Account JSON**: Generate in Google Cloud Console IAM -> Service Accounts -> Keys (select JSON type).

@@ -1,0 +1,98 @@
+services:
+
+  # ── PostgreSQL database ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: n8n
+    volumes:
+      - n8n_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Not exposed externally — only n8n needs it via the internal network
+
+  # ── n8n (built from local Dockerfile) ────────────────────────────────────────
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+
+    # ── Port mapping: host:5678 → container:5678 ─────────────────────────────
+    # Access n8n at: http://localhost:5678
+    ports:
+      - "5678:5678"
+
+    # ── Load all credentials from .env (read once, available forever) ──────
+    env_file:
+      - .env
+
+    environment:
+      # ── Database ────────────────────────────────────────────────────────
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: postgres
+      DB_POSTGRESDB_PASSWORD: postgres
+
+      # ── n8n URL (used for webhooks + OAuth callbacks) ─────────────────
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: "http://localhost:5678/"
+
+      # ── Env variable access inside n8n nodes ────────────────────────
+      N8N_ENFORCE_SETTINGS_FILE_FOR_EVAL: "false"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_ENABLE_UNSAFE_CORE_NODES: "true"
+      NODES_EXCLUDE: "[]"
+
+      # ── File access: /tmp for video staging, /workspace for scripts ───
+      # The Channel B YouTube workflow writes videos to /tmp then reads them back
+      N8N_RESTRICT_FILE_ACCESS_TO: "/tmp;/workspace"
+
+      # ── Basic Auth for n8n UI ────────────────────────────────────────
+      N8N_BASIC_AUTH_ACTIVE: "false"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: password123
+
+      # ── Python / yt-dlp path hint ───────────────────────────────────
+      PYTHON_PATH: /usr/bin/python3
+
+      # ── Timezone (change to your local timezone if needed) ──────────
+      GENERIC_TIMEZONE: "Asia/Kolkata"
+      TZ: "Asia/Kolkata"
+
+    volumes:
+      # n8n data (workflows, credentials, execution logs)
+      - n8n_data:/home/node/.n8n
+      # Your workspace files (workflows JSONs, local_clipper.py, .env, clips/)
+      - .:/workspace
+      # Shared /tmp for video processing + YouTube workflow staging
+      # writeBinaryFile saves here, readBinaryFile reads it back for upload
+      - clipper_tmp:/tmp
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+# ── Named volumes (persisted across restarts) ──────────────────────────────────
+volumes:
+  n8n_data:
+  n8n_db_data:
+  clipper_tmp:

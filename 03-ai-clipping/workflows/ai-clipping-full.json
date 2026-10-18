@@ -1,0 +1,515 @@
+{
+  "name": "AI Clipping Automation - Full Auto",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Clip a Video",
+        "formDescription": "Paste a YouTube link. The workflow extracts the best moments, exports vertical shorts, writes captions/hashtags, and schedules them across TikTok, Instagram, and YouTube.",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "YouTube URL", "fieldType": "text", "requiredField": true },
+            { "fieldLabel": "Number of Clips (2-3)", "fieldType": "number", "requiredField": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n1-form",
+      "name": "On form submission",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [ -1600, 0 ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Sheet1"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "n1-sheet-trigger",
+      "name": "On Sheet Row Added",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [ -1600, 200 ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_SHEETS_CRED_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "n1-schedule",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [ -1600, -200 ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrdUwTyyPLXPfnB2YQ",
+        "options": {}
+      },
+      "id": "n1-rss",
+      "name": "Fetch Fireship RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ -1400, -200 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const xml = $input.first().json.body || $input.first().json.data || '';\nconst entryReg = /<entry>([\\s\\S]*?)<\\/entry>/g;\nconst linkReg = /<link[^>]*?href=[\"'](https:\\/\\/www\\.youtube\\.com\\/watch\\?v=[^\"']+)[\"']/;\nconst titleReg = /<title>([\\s\\S]*?)<\\/title>/;\nlet matches;\nconst results = [];\nwhile ((matches = entryReg.exec(xml)) !== null) {\n  const entryContent = matches[1];\n  const linkMatch = linkReg.exec(entryContent);\n  const titleMatch = titleReg.exec(entryContent);\n  if (linkMatch) {\n    results.push({\n      json: {\n        title: titleMatch ? titleMatch[1].replace(/<!\\[CDATA\\[(.*?)\\]\\]>/, '$1').trim() : 'Fireship Tech Video',\n        youtube_url: linkMatch[1].trim()\n      }\n    });\n  }\n}\n// Return only the single latest video\nreturn results.slice(0, 1);"
+      },
+      "id": "n1-rss-parse",
+      "name": "Parse RSS XML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ -1200, -200 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize inputs from Google Sheet, Manual Form, or RSS feed triggers\nlet url = '';\nlet clipCount = 3;\n\n// 1. Try manual form\ntry {\n  const formInput = $items('On form submission');\n  if (formInput.length > 0 && formInput[0].json['YouTube URL']) {\n    url = formInput[0].json['YouTube URL'];\n    clipCount = Number(formInput[0].json['Number of Clips (2-3)']) || 3;\n  }\n} catch (e) {}\n\n// 2. Try Google Sheet\nif (!url) {\n  try {\n    const sheetInput = $items('On Sheet Row Added');\n    if (sheetInput.length > 0) {\n      url = sheetInput[0].json['youtube_url'] || sheetInput[0].json['YouTube URL'] || sheetInput[0].json['url'];\n      clipCount = Number(sheetInput[0].json['clip_count'] || sheetInput[0].json['clips']) || 3;\n    }\n  } catch (e) {}\n}\n\n// 3. Try RSS Trigger\nif (!url) {\n  try {\n    const rssInput = $items('Parse RSS XML');\n    if (rssInput.length > 0 && rssInput[0].json.youtube_url) {\n      url = rssInput[0].json.youtube_url;\n      clipCount = 3; // Default to 3 clips for automated tech news runs\n    }\n  } catch (e) {}\n}\n\nclipCount = Number(clipCount) || 3;\nif (clipCount < 2) clipCount = 2;\nif (clipCount > 3) clipCount = 3;\n\nif (!url || !/^https?:\\/\\//.test(url)) {\n  throw new Error('No valid YouTube URL was provided to the workflow.');\n}\n\nreturn [{ json: { source_video_url: url, clip_count: clipCount, run_id: Date.now().toString() } }];"
+      },
+      "id": "n2-validate",
+      "name": "Validate & Merge Inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ -1000, 0 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.klap.app/v2/tasks/video-to-shorts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "={{ $env.KLAP_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"source_video_url\": $json.source_video_url, \"language\": \"en\", \"target_clip_count\": $json.clip_count, \"max_clip_count\": $json.clip_count, \"editing_options\": { \"captions\": true, \"reframe\": true, \"emojis\": true, \"remove_silences\": true, \"intro_title\": false }, \"min_duration\": 15, \"max_duration\": 60, \"target_duration\": 30 } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "n3-analyze",
+      "name": "Analyze Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ -800, 0 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": { "amount": 20, "unit": "seconds" },
+      "id": "n4-wait",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [ -600, 0 ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.klap.app/v2/tasks/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.KLAP_API_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "n5-checkstatus",
+      "name": "Check Status of Analyzing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ -400, 0 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ready",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n6-if",
+      "name": "If Status Ready",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [ -200, 0 ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.klap.app/v2/projects/{{ $json.output_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.KLAP_API_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "n7-getshorts",
+      "name": "Get Shorts Ideas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 0, -100 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rank clips by Klap's virality_score and limit to user clip count\nconst clipCount = $('Validate & Merge Inputs').first().json.clip_count;\nconst outputId = $('Check Status of Analyzing').first().json.output_id;\nconst shorts = $json.shorts || $json.clips || [];\n\nconst ranked = [...shorts].sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));\nconst top = ranked.slice(0, clipCount);\n\nif (top.length === 0) {\n  throw new Error('Klap returned no clip candidates for this video.');\n}\n\nreturn top.map((clip, index) => ({\n  json: {\n    output_id: outputId,\n    short_id: clip.id,\n    title: clip.title || `Clip ${index + 1}`,\n    virality_score: clip.virality_score || null,\n    transcript_summary: clip.transcript || clip.summary || '',\n    clip_index: index\n  }\n}));"
+      },
+      "id": "n8-selecttop",
+      "name": "Select Top Clips",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 200, -100 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.klap.app/v2/projects/{{ $json.output_id }}/{{ $json.short_id }}/exports",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.KLAP_API_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "n9-createexport",
+      "name": "Create High Resolution Short",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 400, -100 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": { "amount": 20, "unit": "seconds" },
+      "id": "n10-wait1",
+      "name": "Wait 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [ 600, -100 ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.klap.app/v2/projects/{{ $('Select Top Clips').item.json.output_id }}/{{ $('Select Top Clips').item.json.short_id }}/exports/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.KLAP_API_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "n11-getexport",
+      "name": "Get Exported Short",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 800, -100 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ready",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n12-if1",
+      "name": "If Export Ready",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [ 1000, -100 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build a caption + hashtags per clip from Klap's title/summary data\nconst title = ($('Select Top Clips').item.json.title || 'New clip').trim();\nconst summary = ($('Select Top Clips').item.json.transcript_summary || '').slice(0, 220);\n\nconst stopwords = new Set(['the','and','for','with','that','this','from','have','are','was','were','you','your']);\nconst words = (title + ' ' + summary)\n  .toLowerCase()\n  .replace(/[^a-z0-9\\s]/g, '')\n  .split(/\\s+/)\n  .filter(w => w.length > 3 && !stopwords.has(w));\n\nconst uniqueWords = [...new Set(words)].slice(0, 5);\nconst hashtags = uniqueWords.map(w => `#${w}`).join(' ') + ' #shorts #viral';\n\nconst caption = `${title}\\n\\n${summary}\\n\\n${hashtags}`;\n\nreturn [{\n  json: {\n    ...$('Select Top Clips').item.json,\n    export_url: $json.url || $json.export_url,\n    caption,\n    hashtags\n  }\n}];"
+      },
+      "id": "n13-caption",
+      "name": "Generate Caption & Hashtags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 1200, -100 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stagger posting times so multiple clips from the same run don't post simultaneously\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.counter === undefined) staticData.counter = 0;\n\nstaticData.counter += 1;\nif (staticData.counter > 4) staticData.counter = 1;\n\nconst clipIndex = $json.clip_index || 0;\nconst baseDate = new Date();\n\n// Rotate days (1-4) plus a same-day 6-hour offset per clip\nbaseDate.setDate(baseDate.getDate() + staticData.counter);\nbaseDate.setHours(baseDate.getHours() + clipIndex * 6);\n\nreturn [{\n  json: {\n    ...$json,\n    scheduledTime: baseDate.toISOString(),\n    scheduleCounter: staticData.counter\n  }\n}];"
+      },
+      "id": "n14-schedule",
+      "name": "Compute Schedule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 1400, -100 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.blotato.com/v2/media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "blotato-api-key", "value": "={{ $env.BLOTATO_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"url\": $json.export_url } }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "n15-upload",
+      "name": "Upload Video to Blotato",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 1600, -100 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.blotato.com/v2/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "blotato-api-key", "value": "={{ $env.BLOTATO_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"post\": { \"accountId\": $env.TIKTOK_ACCOUNT_ID, \"content\": { \"text\": $('Compute Schedule').item.json.caption, \"mediaUrls\": [ $json.url ], \"platform\": \"tiktok\" }, \"target\": { \"targetType\": \"tiktok\", \"privacyLevel\": \"PUBLIC_TO_EVERYONE\", \"disabledComments\": false, \"disabledDuet\": false, \"disabledStitch\": false, \"isBrandedContent\": false, \"isYourBrand\": true, \"isAiGenerated\": false } }, \"scheduledTime\": $('Compute Schedule').item.json.scheduledTime } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "n16-tiktok",
+      "name": "Schedule TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 1800, -260 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.blotato.com/v2/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "blotato-api-key", "value": "={{ $env.BLOTATO_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"post\": { \"accountId\": $env.INSTAGRAM_ACCOUNT_ID, \"content\": { \"text\": $('Compute Schedule').item.json.caption, \"mediaUrls\": [ $json.url ], \"platform\": \"instagram\" }, \"target\": { \"targetType\": \"instagram\", \"mediaType\": \"reel\" } }, \"scheduledTime\": $('Compute Schedule').item.json.scheduledTime } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "n17-instagram",
+      "name": "Schedule Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 1800, -120 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.blotato.com/v2/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "blotato-api-key", "value": "={{ $env.BLOTATO_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"post\": { \"accountId\": $env.YOUTUBE_ACCOUNT_ID, \"content\": { \"text\": $('Compute Schedule').item.json.caption.slice(0,99), \"mediaUrls\": [ $json.url ], \"platform\": \"youtube\" }, \"target\": { \"targetType\": \"youtube\", \"title\": $('Compute Schedule').item.json.caption.slice(0,99), \"privacyStatus\": \"public\", \"shouldNotifySubscribers\": true, \"isMadeForKids\": false } }, \"scheduledTime\": $('Compute Schedule').item.json.scheduledTime } }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "n18-youtube",
+      "name": "Schedule YouTube",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 1800, 20 ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "mode": "list", "value": "YOUR_GOOGLE_SHEET_ID" },
+        "sheetName": { "mode": "list", "value": "Sheet1" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $('Validate & Merge Inputs').item.json.run_id }}",
+            "title": "={{ $('Compute Schedule').item.json.title }}",
+            "scheduledTime": "={{ $('Compute Schedule').item.json.scheduledTime }}",
+            "export_url": "={{ $('Compute Schedule').item.json.export_url }}",
+            "status": "posted"
+          }
+        }
+      },
+      "id": "n19-log",
+      "name": "Save Shorts Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [ 2100, -120 ],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CRED_ID", "name": "Google Sheets" } },
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Central error logger. Catch-all for error outputs.\nconst err = $json.error || $json;\nconsole.log('AI Clipping Automation error:', JSON.stringify(err));\nreturn [{ json: { failed_node: $json.node ? $json.node.name : 'unknown', error: err, timestamp: new Date().toISOString() } }];"
+      },
+      "id": "n20-errorlog",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 0, 200 ]
+    }
+  ],
+  "connections": {
+    "On form submission": { "main": [ [ { "node": "Validate & Merge Inputs", "type": "main", "index": 0 } ] ] },
+    "On Sheet Row Added": { "main": [ [ { "node": "Validate & Merge Inputs", "type": "main", "index": 0 } ] ] },
+    "Daily Schedule": { "main": [ [ { "node": "Fetch Fireship RSS", "type": "main", "index": 0 } ] ] },
+    "Fetch Fireship RSS": { "main": [ [ { "node": "Parse RSS XML", "type": "main", "index": 0 } ] ] },
+    "Parse RSS XML": { "main": [ [ { "node": "Validate & Merge Inputs", "type": "main", "index": 0 } ] ] },
+    "Validate & Merge Inputs": { "main": [ [ { "node": "Analyze Video", "type": "main", "index": 0 } ] ] },
+    "Analyze Video": {
+      "main": [ [ { "node": "Wait", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "Wait": { "main": [ [ { "node": "Check Status of Analyzing", "type": "main", "index": 0 } ] ] },
+    "Check Status of Analyzing": {
+      "main": [ [ { "node": "If Status Ready", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "If Status Ready": {
+      "main": [
+        [ { "node": "Get Shorts Ideas", "type": "main", "index": 0 } ],
+        [ { "node": "Wait", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Get Shorts Ideas": {
+      "main": [ [ { "node": "Select Top Clips", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "Select Top Clips": { "main": [ [ { "node": "Create High Resolution Short", "type": "main", "index": 0 } ] ] },
+    "Create High Resolution Short": {
+      "main": [ [ { "node": "Wait 1", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "Wait 1": { "main": [ [ { "node": "Get Exported Short", "type": "main", "index": 0 } ] ] },
+    "Get Exported Short": {
+      "main": [ [ { "node": "If Export Ready", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "If Export Ready": {
+      "main": [
+        [ { "node": "Generate Caption & Hashtags", "type": "main", "index": 0 } ],
+        [ { "node": "Wait 1", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Generate Caption & Hashtags": { "main": [ [ { "node": "Compute Schedule", "type": "main", "index": 0 } ] ] },
+    "Compute Schedule": { "main": [ [ { "node": "Upload Video to Blotato", "type": "main", "index": 0 } ] ] },
+    "Upload Video to Blotato": {
+      "main": [
+        [
+          { "node": "Schedule TikTok", "type": "main", "index": 0 },
+          { "node": "Schedule Instagram", "type": "main", "index": 0 },
+          { "node": "Schedule YouTube", "type": "main", "index": 0 }
+        ]
+      ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "Schedule TikTok": {
+      "main": [ [ { "node": "Save Shorts Log", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "Schedule Instagram": {
+      "main": [ [ { "node": "Save Shorts Log", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    },
+    "Schedule YouTube": {
+      "main": [ [ { "node": "Save Shorts Log", "type": "main", "index": 0 } ] ],
+      "error": [ [ { "node": "Log Error", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null
+}

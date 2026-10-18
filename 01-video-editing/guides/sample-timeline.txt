@@ -1,0 +1,6 @@
+# Sample timeline overlays for your trial video
+# Format: [Start Seconds] - [End Seconds] | Text | [Overlay Text] | [Position: top / center / bottom]
+
+0.20 - 3.50 | Text | Preetham J | top
+4.00 - 8.00 | Text | Dynamic n8n Video Editing | bottom
+10.00 - 14.50 | Text | Stitching Clips Locally | center

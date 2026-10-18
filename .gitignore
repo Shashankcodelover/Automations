@@ -1,0 +1,21 @@
+# ── Local env and credentials ──
+.env
+infra/guides/credentials-setup.txt
+
+# ── OAuth tokens (generated locally) ──
+infra/tokens/
+token.json
+
+# ── Python build artifacts ──
+__pycache__/
+*.pyc
+
+# ── Media / output files ──
+*.mp4
+03-ai-clipping/output/
+
+# ── Local GSD agents folder ──
+.agents/
+
+# ── Archive (not tracked) ──
+archive/

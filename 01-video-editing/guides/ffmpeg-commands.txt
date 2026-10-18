@@ -1,0 +1,81 @@
+# ============================================================
+#   FFMPEG WORKFLOW GUIDE FOR n8n
+#   Engines: Local FFmpeg inside n8n Docker Container
+# ============================================================
+#
+#   To run these commands, you use the "Execute Command" node.
+#   Important: n8n must write binary files to disk first,
+#   run the FFmpeg command, then read the output file back.
+#
+#   File Path Rules:
+#   - Write inputs to:  /tmp/input1.mp4, /tmp/input2.mp4
+#   - Output saved to:  /tmp/output.mp4
+#
+# ============================================================
+
+## 📋 PRE-STEP: WRITE BINARY FILES TO DISK (n8n Node)
+Before executing any FFmpeg command, use the "Write Binary File" node in n8n:
+- **File Path**: `/tmp/input1.mp4`
+- **Data Property**: `data` (or whatever the incoming video field is called)
+
+---
+
+## 🛠️ TASK 1: TRIM AND STITCH VIDEOS TOGETHER
+
+### Command to Trim a Video:
+Cut from 5 seconds mark to 15 seconds mark:
+```bash
+ffmpeg -y -i /tmp/input1.mp4 -ss 00:00:05 -to 00:00:15 -c:v libx264 -c:a aac /tmp/trimmed.mp4
+```
+*Note:*
+- `-ss`: Start time
+- `-to`: End time (use `-t` instead if you want to specify duration)
+
+### Command to Stitch Two Trimmed Videos:
+Stitch `trimmed1.mp4` and `trimmed2.mp4` together:
+```bash
+ffmpeg -y -i /tmp/trimmed1.mp4 -i /tmp/trimmed2.mp4 -filter_complex "[0:v][0:a][1:v][1:a] concat=n=2:v=1:a=1 [v][a]" -map "[v]" -map "[a]" /tmp/output.mp4
+```
+
+---
+
+## 🛠️ TASK 2: COMBINE MULTIPLE VIDEO CLIPS INTO ONE
+
+If you have multiple clips and want to combine them without re-encoding (extremely fast, requires all clips to have the same resolution/codec):
+
+1. **Write a file list** (`/tmp/mylist.txt`) in n8n:
+   ```text
+   file '/tmp/input1.mp4'
+   file '/tmp/input2.mp4'
+   file '/tmp/input3.mp4'
+   ```
+2. **Run this command**:
+   ```bash
+   ffmpeg -y -f concat -safe 0 -i /tmp/mylist.txt -c copy /tmp/combined_output.mp4
+   ```
+
+---
+
+## 🛠️ TASK 3: RESIZE AND CROP VIDEOS
+
+### Command to Resize (Scale) to a Specific Resolution:
+Resize video to 1080x1920 (9:16 vertical video format for Instagram/Shorts):
+```bash
+ffmpeg -y -i /tmp/input1.mp4 -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -c:a copy /tmp/resized.mp4
+```
+*Note:* This scales the video and adds black bars (padding) if the aspect ratio doesn't match, keeping it clean.
+
+### Command to Crop a Video:
+Crop a 1080x1920 section from the absolute center of a 1920x1080 video:
+```bash
+ffmpeg -y -i /tmp/input1.mp4 -vf "crop=1080:1920" -c:v libx264 -c:a copy /tmp/cropped.mp4
+```
+*Formula:* `crop=width:height:x:y` (leaving out x and y crops directly from the center).
+
+---
+
+## 📥 POST-STEP: READ FILE BACK INTO n8n
+After the "Execute Command" node finishes:
+1. Create a "Read Binary File" node.
+2. **File Path**: `/tmp/output.mp4` (or whatever output path you used).
+3. The file is now a binary object inside n8n, ready to upload to Google Drive!

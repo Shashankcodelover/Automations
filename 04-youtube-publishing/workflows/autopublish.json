@@ -1,0 +1,284 @@
+{
+  "name": "YouTube Auto-Publish (Automatic SEO & Upload)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1SvEUB7ybhuYsjh02U-BfTOEGJKGQFAZt"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "gd-trigger",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-cred-id",
+          "name": "Google Drive — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const file = items[0].json;\n\n// Clean the filename into a readable title\nconst filename = file.name || 'Untitled Video';\nconst rawTitle = filename.substring(0, filename.lastIndexOf('.')) || filename;\nconst videoTitle = rawTitle\n  .replace(/_/g, ' ')\n  .replace(/-/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\n// Preserve any description set on the Drive file\nconst videoDescription = file.description || '';\n\nreturn [{\n  json: {\n    ...file,\n    videoTitle,\n    videoDescription\n  }\n}];"
+      },
+      "id": "extract-title",
+      "name": "Extract Title",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are uploading the following video to YouTube.\n\n**Video Title / Topic:** {{ $json.videoTitle }}\n**Creator Description (if any):** {{ $json.videoDescription || 'Not provided — infer from the title only.' }}\n\nGenerate fully optimised YouTube SEO metadata for this video. Read both the title and description carefully and make EVERYTHING specific to this exact content. Do NOT use generic placeholders.",
+        "options": {
+          "systemMessage": "You are a world-class YouTube SEO strategist and viral content expert.\n\nYour task: generate high-performing, platform-optimised YouTube metadata for the given video. Use BOTH the video title AND the creator's description (if provided) to make metadata highly specific and relevant.\n\nSTRICT RULES:\n- youtubeTitle: Max 70 characters. Craft a compelling, curiosity-driven title using power words, emotional triggers, or viral hooks (e.g. 'You Won't Believe...', 'This AI Created...'). MUST reference the exact subject of the video — no generic titles.\n- youtubeDescription: Follow this exact structure:\n  Line 1-2: A powerful HOOK that immediately grabs attention and teases what the viewer will see.\n  Line 3-8: A vivid, immersive paragraph describing the video content, scene, and viewer experience.\n  Line 9: 'Generated using Google VEO 3 generative AI.' (if AI video) or 'Subscribe for more.'\n  Line 10: 'Subscribe for daily AI cinematic shorts and generative AI art.'\n  Line 11-12: A natural sentence containing 8-12 high-traffic keywords related to the EXACT content — not generic tech terms.\n  Line 13: 5 relevant hashtags at the very end (e.g. #AIVideo #VEO3 #GenerativeAI #[topic] #[topic2]).\n- youtubeTags: A JSON array of exactly 20 highly relevant YouTube tags. Each tag MUST be under 30 characters. Mix: 3-4 broad AI/tech tags, 8-10 very specific tags about the exact video subject, 5-7 trend/niche tags. NEVER use generic filler like 'video', 'youtube', 'watch'.\n\nYour response MUST be a single raw JSON object. Do NOT wrap in markdown. Do NOT add text before or after JSON.\n\n{\n  \"youtubeTitle\": \"...\",\n  \"youtubeDescription\": \"...\",\n  \"youtubeTags\": [\"tag1\", \"tag2\", \"tag3\"],\n  \"thumbnailPrompt\": \"A highly detailed image generation prompt for a YouTube thumbnail. Describe vivid colors, style, subject, mood, and text overlay.\"\n}"
+        }
+      },
+      "id": "caption-agent",
+      "name": "Caption Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "id": "gemini-model",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        420,
+        500
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-api-cred-id",
+          "name": "Google Gemini API — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawOutput = items[0].json.output;\n\n// Strip any markdown code fences if Gemini added them\nlet clean = rawOutput\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .trim();\n\n// Find the first { and last } to extract the JSON object safely\nconst start = clean.indexOf('{');\nconst end = clean.lastIndexOf('}');\nif (start === -1 || end === -1) {\n  throw new Error('Gemini did not return valid JSON. Raw output: ' + rawOutput);\n}\nclean = clean.substring(start, end + 1);\n\nconst data = JSON.parse(clean);\n\n// Handle tags as either array or comma-separated string\nconst rawTags = data.youtubeTags || [];\nconst tagsArray = Array.isArray(rawTags)\n  ? rawTags\n  : rawTags.split(',');\n\nconst tagsString = tagsArray\n  .map(t => t.trim().substring(0, 30))\n  .filter(t => t.length > 0)\n  .slice(0, 20)\n  .join(',');\n\nreturn [{\n  json: {\n    ...items[0].json,\n    youtubeTitle: (data.youtubeTitle || '').substring(0, 100),\n    youtubeDescription: data.youtubeDescription || '',\n    youtubeTags: tagsString,\n    thumbnailPrompt: data.thumbnailPrompt || ''\n  }\n}];"
+      },
+      "id": "parse-gemini",
+      "name": "Parse Gemini JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Drive Trigger').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "download-video",
+      "name": "Download Video from Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-cred-id",
+          "name": "Google Drive — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Parse Gemini JSON').item.json.youtubeTitle }}",
+        "description": "={{ $('Parse Gemini JSON').item.json.youtubeDescription }}",
+        "binaryPropertyName": "data",
+        "options": {
+          "tags": "={{ $('Parse Gemini JSON').item.json.youtubeTags }}",
+          "privacyStatus": "public"
+        }
+      },
+      "id": "youtube-upload",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "youtube-cred-id",
+          "name": "YouTube OAuth2 — Account A"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://image.pollinations.ai/prompt/{{ encodeURIComponent($('Parse Gemini JSON').item.json.thumbnailPrompt) }}",
+        "responseFormat": "file",
+        "outputBinaryFieldName": "thumbnailBinary",
+        "options": {}
+      },
+      "id": "download-thumbnail",
+      "name": "Download Thumbnail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "thumbnail",
+        "videoId": "={{ $('YouTube Upload').item.json.id }}",
+        "binaryPropertyName": "thumbnailBinary"
+      },
+      "id": "youtube-thumbnail-upload",
+      "name": "YouTube Thumbnail Upload",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "youtube-cred-id",
+          "name": "YouTube OAuth2 — Account A"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Title",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Title": {
+      "main": [
+        [
+          {
+            "node": "Caption Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Caption Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Caption Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini JSON": {
+      "main": [
+        [
+          {
+            "node": "Download Video from Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video from Drive": {
+      "main": [
+        [
+          {
+            "node": "YouTube Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Upload": {
+      "main": [
+        [
+          {
+            "node": "Download Thumbnail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Thumbnail": {
+      "main": [
+        [
+          {
+            "node": "YouTube Thumbnail Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "0c360c25e8e9ea06a7e37afd5948ea7611f41c464c2d9455a692de1056a78ed6"
+  }
+}

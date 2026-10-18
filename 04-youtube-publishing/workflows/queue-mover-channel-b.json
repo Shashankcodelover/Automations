@@ -1,0 +1,159 @@
+{
+  "name": "YouTube Queue Mover (Channel B)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "day",
+              "hours": 9
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-queue",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "authentication": "oAuth2",
+        "options": {
+          "q": "'<<<QUEUE_FOLDER_A_ID>>>' in parents and trashed = false"
+        }
+      },
+      "id": "gd-list-queue",
+      "name": "List Queue Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        300,
+        360
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const files = items;\nif (!files || files.length === 0 || !files[0].json.id) {\n  return [];\n}\n\n// Sort alphabetically by name\nfiles.sort((a, b) => {\n  const nameA = (a.json.name || '').toLowerCase();\n  const nameB = (b.json.name || '').toLowerCase();\n  return nameA.localeCompare(nameB);\n});\n\n// Return only the first item in the sorted queue\nreturn [files[0]];"
+      },
+      "id": "select-first-queue-item",
+      "name": "Select First Alphabetically",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "authentication": "oAuth2",
+        "fileId": "={{ $json.id }}",
+        "parents": [
+          "1IFkvmSJmL_5DLK1URAAicD8EZJ3oCbO5"
+        ]
+      },
+      "id": "gd-copy-to-publishing",
+      "name": "Copy to Publishing Folder B",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        700,
+        360
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "authentication": "oAuth2",
+        "fileId": "={{ $('Select First Alphabetically').item.json.id }}"
+      },
+      "id": "gd-delete-from-queue",
+      "name": "Delete from Queue Folder A",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        900,
+        360
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "List Queue Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Queue Folder": {
+      "main": [
+        [
+          {
+            "node": "Select First Alphabetically",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select First Alphabetically": {
+      "main": [
+        [
+          {
+            "node": "Copy to Publishing Folder B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy to Publishing Folder B": {
+      "main": [
+        [
+          {
+            "node": "Delete from Queue Folder A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "0c360c25e8e9ea06a7e37afd5948ea7611f41c464c2d9455a692de1056a78ed6",
+    "templateCredsSetupCompleted": true
+  }
+}

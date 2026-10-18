@@ -1,0 +1,697 @@
+{
+  "name": "✂️ AI Clipping — Revision Loop Edition",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "mode": "list",
+          "value": "13WzEh3NC6wcmRc6NhD66-orUBYtn3NWhq9xTsZJ0vjs"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Clipping Queue"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "clip-sheet-trigger",
+      "name": "📋 Trigger: New Clipping Row",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        -200
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Lhskb1Dp4VDCJ05G",
+          "name": "Google Sheets account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "✂️ Clip a YouTube Video",
+        "formDescription": "Paste a YouTube URL. AI will find the best viral moments, crop to 9:16, add captions + speed effects, and send you previews for approval.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "YouTube URL",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Number of Clips (1–4)",
+              "fieldType": "number",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Channel Watermark",
+              "placeholder": "@MemesAdda",
+              "fieldType": "text",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "clip-form-new",
+      "name": "🎯 Form: New Clip Job",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "✏️ Revise a Clip",
+        "formDescription": "Tell us what to change about a specific clip. Be specific (e.g. 'Start 15 seconds earlier', 'Pick a different moment about X topic', 'Remove the caption at 0:05', 'Make it 1.3x faster').",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Clip Job ID (from Telegram)",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Clip Number to Revise (1, 2, 3...)",
+              "fieldType": "number",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "What should change?",
+              "placeholder": "Examples:\n- Start 20 seconds earlier (around 5:30 instead of 5:50)\n- Pick a different viral moment — NOT about the intro\n- Make the speed 1.2x faster\n- Change the caption text to 'This will blow your mind 🤯'\n- Remove the subtitle at the beginning",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "clip-form-revise",
+      "name": "✏️ Form: Revise Clip",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine: fresh job OR revision of an existing clip\nlet youtube_url = '', clip_count = 3, watermark = '@MemesAdda';\nlet run_id = '', isRevision = false;\nlet revisionClipIndex = 1, revisionInstructions = '', iteration = 1;\n\n// ── Path A: Sheet trigger ────────────────────────────────────────────────────\ntry {\n  const sheet = $items('📋 Trigger: New Clipping Row');\n  if (sheet.length > 0 && (sheet[0].json.youtube_url || sheet[0].json['YouTube URL'])) {\n    youtube_url = sheet[0].json.youtube_url || sheet[0].json['YouTube URL'] || '';\n    clip_count  = Number(sheet[0].json.clip_count || 3);\n    watermark   = sheet[0].json.watermark || '@MemesAdda';\n    run_id      = Date.now().toString();\n    isRevision  = false;\n    const sd = $getWorkflowStaticData('global');\n    sd[run_id] = { youtube_url, clip_count, watermark, clips: {}, iteration: 0 };\n  }\n} catch(e) {}\n\n// ── Path B: Form (fresh) ─────────────────────────────────────────────────────\nif (!youtube_url) {\n  try {\n    const form = $items('🎯 Form: New Clip Job');\n    if (form.length > 0 && form[0].json['YouTube URL']) {\n      youtube_url = form[0].json['YouTube URL'];\n      clip_count  = Number(form[0].json['Number of Clips (1–4)']) || 3;\n      watermark   = form[0].json['Channel Watermark'] || '@MemesAdda';\n      run_id      = Date.now().toString();\n      isRevision  = false;\n      const sd = $getWorkflowStaticData('global');\n      sd[run_id] = { youtube_url, clip_count, watermark, clips: {}, iteration: 0 };\n    }\n  } catch(e) {}\n}\n\n// ── Path C: Revision form ────────────────────────────────────────────────────\nif (!youtube_url) {\n  try {\n    const rev = $items('✏️ Form: Revise Clip');\n    if (rev.length > 0 && rev[0].json['Clip Job ID (from Telegram)']) {\n      run_id               = rev[0].json['Clip Job ID (from Telegram)'].trim();\n      revisionClipIndex    = Number(rev[0].json['Clip Number to Revise (1, 2, 3...)']) || 1;\n      revisionInstructions = rev[0].json['What should change?'] || '';\n      isRevision           = true;\n      // Load state\n      const sd = $getWorkflowStaticData('global');\n      const prev = sd[run_id] || {};\n      youtube_url = prev.youtube_url || '';\n      clip_count  = prev.clip_count  || 3;\n      watermark   = prev.watermark   || '@MemesAdda';\n      iteration   = (prev.clips?.[revisionClipIndex]?.iteration || 0) + 1;\n      if (!prev.clips) prev.clips = {};\n      if (!prev.clips[revisionClipIndex]) prev.clips[revisionClipIndex] = { iteration: 0, history: [] };\n      prev.clips[revisionClipIndex].iteration = iteration;\n      prev.clips[revisionClipIndex].history   = [...(prev.clips[revisionClipIndex].history || []), revisionInstructions];\n      sd[run_id] = prev;\n    }\n  } catch(e) {}\n}\n\nclip_count = Math.max(1, Math.min(4, Number(clip_count) || 3));\n\nif (!youtube_url || !/^https?:\\/\\//.test(youtube_url)) {\n  throw new Error('No valid YouTube URL found. Please provide a URL or a valid Clip Job ID.');\n}\nif (iteration > 8) throw new Error('Maximum revision limit (8) reached for this clip.');\n\nreturn [{ json: {\n  youtube_url, clip_count, watermark, run_id,\n  isRevision, revisionClipIndex, revisionInstructions, iteration\n} }];"
+      },
+      "id": "clip-route",
+      "name": "🔀 Route: New Job or Clip Revision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "mode": "list",
+          "value": "13WzEh3NC6wcmRc6NhD66-orUBYtn3NWhq9xTsZJ0vjs"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Clipping Queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $json.run_id }}",
+            "status": "processing",
+            "started_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "clip-sheet-processing",
+      "name": "📊 Sheet: Mark Processing",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1860,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Lhskb1Dp4VDCJ05G",
+          "name": "Google Sheets account account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the python script command with revision constraints if applicable\nconst { youtube_url, clip_count, watermark, run_id, isRevision, revisionClipIndex, revisionInstructions, iteration } = $('🔀 Route: New Job or Clip Revision').first().json;\n\n// Build extra constraint argument for the script\nlet extraArgs = '';\nif (isRevision && revisionInstructions) {\n  // Pass revision as an env variable — script will pick it up\n  extraArgs = `CLIP_REVISION_TARGET=${revisionClipIndex} CLIP_REVISION_INSTRUCTIONS='${revisionInstructions.replace(/'/g, '').slice(0, 300)}'`;\n}\n\nreturn [{\n  json: {\n    youtube_url, clip_count, watermark, run_id, isRevision,\n    revisionClipIndex, revisionInstructions, iteration,\n    extraArgs\n  }\n}];"
+      },
+      "id": "clip-build-cmd",
+      "name": "🛠️ Build Script Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/sh\nset -e\necho \"=== ✂️ AI Clipper v2 — Run ID: {{ $json.run_id }} ===\"\necho \"Mode: {% if $json.isRevision %}REVISION (clip {{ $json.revisionClipIndex }}, iteration {{ $json.iteration }}){% else %}FRESH JOB{% endif %}\"\necho \"URL: {{ $json.youtube_url }}\"\necho \"Clips requested: {{ $json.clip_count }}\"\n\nexport CHANNEL_WATERMARK='{{ $json.watermark }}'\n{% if $json.isRevision %}\nexport CLIP_REVISION_TARGET={{ $json.revisionClipIndex }}\nexport CLIP_REVISION_INSTRUCTIONS='{{ $json.revisionInstructions.replace(/'/g, '').slice(0, 300) }}'\necho \"Revision target: clip {{ $json.revisionClipIndex }}\"\necho \"Instructions: $CLIP_REVISION_INSTRUCTIONS\"\n\n# Only remove the specific clip being revised, keep others\nrm -f /workspace/clips/vertical_clip_{{ $json.revisionClipIndex }}.mp4\nrm -f /workspace/clips/_raw_{{ $json.revisionClipIndex }}.mp4\nrm -f /workspace/clips/_subs_{{ $json.revisionClipIndex }}.srt\n{% else %}\n# Fresh job — clean all clips\nrm -f /workspace/clips/vertical_clip_*.mp4\nrm -f /workspace/clips/_*.mp4\nrm -f /workspace/clips/_*.srt\n{% endif %}\nrm -f /workspace/clips/metadata.json\n\nCLIPPER=\"/workspace/03-ai-clipping/scripts/local_clipper_v2.py\"\nif [ ! -f \"$CLIPPER\" ]; then\n  CLIPPER=\"/workspace/local_clipper_v2.py\"\nfi\n\npython3 \"$CLIPPER\" \\\n  '{{ $json.youtube_url }}' \\\n  {{ $json.clip_count }}\n\necho \"=== ✅ Script Complete ===\"\nls -lh /workspace/clips/vertical_clip_*.mp4 2>/dev/null || echo 'No clips found'\ncat /workspace/clips/metadata.json"
+      },
+      "id": "clip-run-script",
+      "name": "🐍 Run Clipper Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1420,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=❌ *AI Clipper Script Failed!*\n\n🔴 *Error output:*\n```\n{{ ($json.stderr || $json.stdout || 'Unknown error').slice(-800) }}\n```\n\n📋 *Run ID:* `{{ $('🔀 Route: New Job or Clip Revision').item.json.run_id }}`\n🕐 {{ $now.toISO() }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "clip-script-err-tg",
+      "name": "📱 Telegram: Script Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1200,
+        260
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "filePath": "/workspace/clips/metadata.json",
+        "options": {}
+      },
+      "id": "clip-read-meta",
+      "name": "📄 Read metadata.json",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse metadata and split into one item per clip\nconst buf  = Buffer.from($input.first().binary.data.data, 'base64');\nconst meta = JSON.parse(buf.toString('utf-8'));\n\nif (!meta || meta.length === 0) {\n  throw new Error('metadata.json is empty — no clips were produced by the script.');\n}\n\nconst { run_id, watermark, isRevision, revisionClipIndex, iteration } = $('🔀 Route: New Job or Clip Revision').first().json;\n\n// Update static data with latest clip results\nconst sd = $getWorkflowStaticData('global');\nif (sd[run_id]) {\n  if (!sd[run_id].clips) sd[run_id].clips = {};\n  meta.forEach((clip, i) => {\n    const clipNum = i + 1;\n    sd[run_id].clips[clipNum] = {\n      ...((sd[run_id].clips[clipNum]) || {}),\n      title:      clip.title,\n      caption:    clip.caption,\n      hashtags:   clip.hashtags,\n      start_time: clip.start_time,\n      end_time:   clip.end_time,\n      clip_path:  clip.clip_path\n    };\n  });\n}\n\nreturn meta.map((clip, i) => ({\n  json: {\n    clip_num:   i + 1,\n    clip_total: meta.length,\n    clip_path:  clip.clip_path,\n    title:      clip.title      || `Clip ${i + 1}`,\n    caption:    clip.caption    || '',\n    hashtags:   clip.hashtags   || '#shorts #viral',\n    start_time: clip.start_time || '',\n    end_time:   clip.end_time   || '',\n    run_id, watermark, isRevision,\n    iteration:  isRevision ? iteration : 1\n  }\n}));"
+      },
+      "id": "clip-parse-meta",
+      "name": "🗂️ Parse & Split Clip Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.clip_path }}",
+        "options": {}
+      },
+      "id": "clip-read-video",
+      "name": "📖 Read Clip File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ 'clip_' + $json.run_id + '_c' + $json.clip_num + '_v' + $json.iteration + '.mp4' }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1IFkvmSJmL_5DLK1URAAicD8EZJ3oCbO5",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "clip-upload-staging",
+      "name": "☁️ Upload Clip to Staging",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -540,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "mode": "list",
+          "value": "13WzEh3NC6wcmRc6NhD66-orUBYtn3NWhq9xTsZJ0vjs"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Clipping Queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $json.run_id }}",
+            "clip_num": "={{ $json.clip_num }}",
+            "iteration": "={{ $json.iteration }}",
+            "title": "={{ $json.title }}",
+            "caption": "={{ $json.caption }}",
+            "hashtags": "={{ $json.hashtags }}",
+            "drive_link": "={{ $('☁️ Upload Clip to Staging').item.json.webViewLink }}",
+            "file_id": "={{ $('☁️ Upload Clip to Staging').item.json.id }}",
+            "status": "pending_approval",
+            "created_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "clip-log-sheet",
+      "name": "📊 Log Clip to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -320,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Lhskb1Dp4VDCJ05G",
+          "name": "Google Sheets account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=✂️ *Clip {{ $json.clip_num }}/{{ $json.clip_total }}{% if $json.iteration > 1 %} — Revision v{{ $json.iteration }}{% endif %} Ready!*\n\n📋 *Job ID (save this!):* `{{ $json.run_id }}`\n🎯 *Title:* {{ $json.title }}\n⏱️ *Time range:* {{ $json.start_time }} → {{ $json.end_time }}\n\n📝 *Caption:*\n{{ $json.caption }}\n\n🏷️ *Hashtags:*\n{{ $json.hashtags }}\n\n_Features: 9:16 vertical ✅ | Dialogue captions ✅ | Speed 1.07x ✅ | Hue-shift ✅ | Watermark: {{ $json.watermark }}_\n\n━━━━━━━━━━━━━━━━━━━━\n🎬 *Preview this clip:*\n{{ $('☁️ Upload Clip to Staging').item.json.webViewLink }}\n━━━━━━━━━━━━━━━━━━━━\n\n✅ *Approve this clip:*\n{{ $execution.resumeUrl }}\n\n✏️ *Need changes to this clip?* Open the revision form:\nhttp://localhost:5678/form/clip-form-revise\n_Enter Job ID: `{{ $json.run_id }}` and Clip Number: {{ $json.clip_num }}_\n\n⏭️ To SKIP this clip — do nothing. Only approved clips move to Publish.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "clip-telegram-preview",
+      "name": "📱 Telegram: Clip Preview",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -100,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "clip-wait-approval",
+      "name": "⏳ Wait: Approve Clip",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "mode": "expression",
+          "value": "={{ $('📊 Log Clip to Sheets').item.json.file_id }}"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1IFkvmSJmL_5DLK1URAAicD8EZJ3oCbO5",
+          "mode": "list"
+        },
+        "options": {
+          "name": "={{ 'SHORT_' + $json.run_id + '_clip' + $('🗂️ Parse & Split Clip Metadata').item.json.clip_num + '_v' + $('🗂️ Parse & Split Clip Metadata').item.json.iteration + '.mp4' }}"
+        }
+      },
+      "id": "clip-move-publish",
+      "name": "🚀 Move Clip to Publish Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        340,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sHG4r1b3zIqyZFV9",
+          "name": "Google Drive account  veo3  veo3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "mode": "list",
+          "value": "13WzEh3NC6wcmRc6NhD66-orUBYtn3NWhq9xTsZJ0vjs"
+        },
+        "sheetName": {
+          "mode": "list",
+          "value": "Clipping Queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $('🔀 Route: New Job or Clip Revision').item.json.run_id }}",
+            "clip_num": "={{ $('🗂️ Parse & Split Clip Metadata').item.json.clip_num }}",
+            "status": "approved",
+            "publish_link": "={{ $json.webViewLink }}",
+            "approved_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "clip-sheet-approved",
+      "name": "✅ Sheet: Mark Approved",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        560,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Lhskb1Dp4VDCJ05G",
+          "name": "Google Sheets account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=✅ *Clip {{ $('🗂️ Parse & Split Clip Metadata').item.json.clip_num }} Approved!*\n\n🎬 *{{ $('🗂️ Parse & Split Clip Metadata').item.json.title }}*\n\n📁 Moved to Publish Folder:\n{{ $('🚀 Move Clip to Publish Folder').item.json.webViewLink }}\n\n🚀 Ready for YouTube Shorts / Instagram Reels / TikTok!\n\n_Job ID: `{{ $('🔀 Route: New Job or Clip Revision').item.json.run_id }}`_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "clip-telegram-approved",
+      "name": "🎉 Telegram: Clip Approved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        780,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "clip-error-trigger",
+      "name": "⚠️ Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID_HERE_HERE",
+        "text": "=⚠️ *AI Clipping — Workflow Error!*\n\n❌ *Failed node:* `{{ $json.execution.error.node?.name || 'Unknown' }}`\n🔴 *Error:* `{{ $json.execution.error.message || 'Unknown error' }}`\n🕐 {{ $now.toISO() }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "clip-error-telegram",
+      "name": "📱 Telegram: Workflow Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -2100,
+        500
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "sESRlpkwi46CtmxI",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "📋 Trigger: New Clipping Row": {
+      "main": [
+        [
+          {
+            "node": "🔀 Route: New Job or Clip Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎯 Form: New Clip Job": {
+      "main": [
+        [
+          {
+            "node": "🔀 Route: New Job or Clip Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✏️ Form: Revise Clip": {
+      "main": [
+        [
+          {
+            "node": "🔀 Route: New Job or Clip Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Route: New Job or Clip Revision": {
+      "main": [
+        [
+          {
+            "node": "📊 Sheet: Mark Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 Sheet: Mark Processing": {
+      "main": [
+        [
+          {
+            "node": "🛠️ Build Script Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🛠️ Build Script Command": {
+      "main": [
+        [
+          {
+            "node": "🐍 Run Clipper Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🐍 Run Clipper Script": {
+      "main": [
+        [
+          {
+            "node": "📄 Read metadata.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "📱 Telegram: Script Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 Read metadata.json": {
+      "main": [
+        [
+          {
+            "node": "🗂️ Parse & Split Clip Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗂️ Parse & Split Clip Metadata": {
+      "main": [
+        [
+          {
+            "node": "📖 Read Clip File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read Clip File": {
+      "main": [
+        [
+          {
+            "node": "☁️ Upload Clip to Staging",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "☁️ Upload Clip to Staging": {
+      "main": [
+        [
+          {
+            "node": "📊 Log Clip to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 Log Clip to Sheets": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram: Clip Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Telegram: Clip Preview": {
+      "main": [
+        [
+          {
+            "node": "⏳ Wait: Approve Clip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Wait: Approve Clip": {
+      "main": [
+        [
+          {
+            "node": "🚀 Move Clip to Publish Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚀 Move Clip to Publish Folder": {
+      "main": [
+        [
+          {
+            "node": "✅ Sheet: Mark Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ Sheet: Mark Approved": {
+      "main": [
+        [
+          {
+            "node": "🎉 Telegram: Clip Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚠️ Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram: Workflow Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null
+}
