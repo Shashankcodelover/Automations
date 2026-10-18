@@ -1,125 +1,35 @@
 # ============================================================
-#   SOCIAL MEDIA AUTOMATION HUB  —  n8n Workspace
-#   Channel A (Personal)  &  Channel B (AI Generated)
+#   AUTOMATION HUB & WORKSPACE
 # ============================================================
 
-## 📁 PROJECT STRUCTURE
+A comprehensive collection of autonomous agent systems, workflow pipelines, and tools.
+
+## 📁 REPOSITORY STRUCTURE
 
 ```
-n8n-automation/
+Automations/
+│
+├── job-application-filler/    ← 🤖 Autopilot-X Autonomous Job Application Engine
+│   ├── AUTOPILOT_X_GLOBAL_TEMPLATE.md
+│   └── README.md
 │
 ├── 01-video-editing/          ← 🎬 Video stitching, cropping, music, captions
-│   ├── workflows/             (2 n8n workflow JSONs: cloud + local)
-│   ├── scripts/               (add_music.py, replace_audio.py)
-│   └── guides/                (FFmpeg commands, editing how-tos)
-│
 ├── 02-ai-video-generation/    ← 🤖 VEO 3 + Vertex AI cinematic video gen
-│   ├── workflows/             (1 n8n workflow JSON)
-│   └── guides/                (VEO 3 prompt guide)
-│
 ├── 03-ai-clipping/            ← 🎞️ YouTube → AI-detected viral Shorts
-│   ├── workflows/             (2 n8n workflow JSONs: full + free)
-│   ├── scripts/               (local_clipper.py, local_clipper_v2.py)
-│   └── output/                (generated clips output directory)
-│
 ├── 04-youtube-publishing/     ← 📤 Auto-publish to YouTube (Channel A + B)
-│   ├── workflows/             (6 n8n workflow JSONs)
-│   ├── scripts/               (cloud_publisher.py, token gen, setup)
-│   └── guides/                (publish guide, upload config)
-│
 ├── infra/                     ← 🐳 Docker, deployment, credentials
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── guides/                (cloud deployment, credentials, config)
-│   └── tokens/                (OAuth tokens — gitignored)
-│
-├── docs/                      ← 📚 Project-wide documentation
-│   └── explainer.md           (tech stack & architecture explainer)
-│
-└── archive/                   ← 🗄️ Deprecated / old experiments (gitignored)
+└── docs/                      ← 📚 Tech stack & architecture explainer
 ```
 
 ---
 
-## THE FULL CONNECTED PIPELINE
+## 🚀 MODULE OVERVIEW
 
-  ╔════════════════════════════════════════════════════════════╗
-  ║  CHANNEL A — Your Own Recorded Videos                      ║
-  ║  (01-video-editing → Folder A → 04-youtube-publishing)     ║
-  ╚═══════════════════════════╦════════════════════════════════╝
-                              ║
-  ╔═══════════════════════════╩════════════════════════════════╗
-  ║  MODULE 01  —  Video Editing                               ║
-  ║  1. Grab Video Clips from Airtable                         ║
-  ║  2. Stitches clips + transitions + background music        ║
-  ║  3. Submagic adds big bold captions (or local FFmpeg)      ║
-  ║                                                            ║
-  ║  🚦 GATE 1: Telegram preview of output video               ║
-  ║            (Approve → Uploads to Drive Folder A)           ║
-  ╚═══════════════════════════╦════════════════════════════════╝
-                              ║
-  ╔═══════════════════════════╩════════════════════════════════╗
-  ║  MODULE 04  —  Publish Channel A                           ║
-  ║  1. Google Drive Trigger watches Folder A                  ║
-  ║  2. Gemini generates highly engaging visual tags           ║
-  ║  3. Pollinations.ai generates emotional shock thumbnail    ║
-  ║                                                            ║
-  ║  🚦 GATE 2: Telegram metadata preview (Title, Tags, Thumb) ║
-  ║            (Approve → Posts immediately to Channel A)      ║
-  ╚════════════════════════════════════════════════════════════╝
+### 1. [Job Application Filler (Autopilot-X)](./job-application-filler/)
+Autonomous career operations engine designed to execute high-precision, zero-defect job applications across modern ATS portals (AshbyHQ, Greenhouse, Lever, etc.) with 100% field occupancy, live verification, and dual-source tracking.
 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ╔════════════════════════════════════════════════════════════╗
-  ║  CHANNEL B — AI Generated VEO 3 Videos                     ║
-  ║  (02-ai-video-generation → Folder B → 04-youtube-publishing)║
-  ╚═══════════════════════════╦════════════════════════════════╝
-                              ║
-  ╔═══════════════════════════╩════════════════════════════════╗
-  ║  MODULE 02  —  AI Video Generation (VEO 3)                 ║
-  ║  1. Gemini generates idea + VEO 3 prompt                   ║
-  ║  2. Vertex AI generates 8-second cinematic video           ║
-  ║                                                            ║
-  ║  🚦 GATE 1: Telegram preview of generated AI video         ║
-  ║            (Approve → Saves to Sheet + uploads Folder B)   ║
-  ╚═══════════════════════════╦════════════════════════════════╝
-                              ▼
-  ╔═══════════════════════════╩════════════════════════════════╗
-  ║  MODULE 04  —  Publish Channel B                           ║
-  ║  1. Google Drive Trigger watches Folder B                  ║
-  ║  2. Gemini generates cinematic tags + VEO 3 credit text    ║
-  ║  3. Pollinations.ai generates dramatic movie-style thumb   ║
-  ║                                                            ║
-  ║  🚦 GATE 2: Telegram metadata preview (Title, Tags, Thumb) ║
-  ║            (Approve → Posts immediately to Channel B)      ║
-  ╚════════════════════════════════════════════════════════════╝
-
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ╔════════════════════════════════════════════════════════════╗
-  ║  STANDALONE — AI Clipping (YouTube → Viral Shorts)         ║
-  ║  (03-ai-clipping module)                                   ║
-  ╚═══════════════════════════╦════════════════════════════════╝
-                              ║
-  ╔═══════════════════════════╩════════════════════════════════╗
-  ║  MODULE 03  —  AI Clipping Automation                      ║
-  ║  1. Input: Long YouTube video URL                          ║
-  ║  2. AI detects most viral 30-60s segments                  ║
-  ║  3. Clips + crops to 9:16 vertical                         ║
-  ║  4. Auto-publishes to TikTok, Instagram, YouTube Shorts    ║
-  ╚════════════════════════════════════════════════════════════╝
-
----
-
-## 🔑 CONFIGURATION
-For credential setup and copy-paste values:
-👉 **[config-checklist.txt](infra/guides/config-checklist.txt)**
-👉 **[credentials-setup.txt](infra/guides/credentials-setup.txt)**
-
----
-
-## 🚨 ERROR HANDLING
-All workflows are protected by an ELI5 error handling engine:
-- If *any* error happens, n8n catches it.
-- Gemini translates the dry code error stack trace into simple, human words.
-- Telegram notifies your phone: "⚠️ VEO 3 workflow failed because your credentials expired. Please generate a new Bearer token."
+### 2. Social Media Automation Pipelines
+- **01-video-editing**: Automated video stitching, transitions, music, and subtitles.
+- **02-ai-video-generation**: Vertex AI / VEO 3 prompt generation and video synthesis.
+- **03-ai-clipping**: Viral Shorts detection and automated clipping from long-form YouTube content.
+- **04-youtube-publishing**: Automated multi-channel publishing with dynamic metadata and thumbnails.
