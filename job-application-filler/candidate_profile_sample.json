@@ -1,0 +1,43 @@
+{
+  "full_name": "Your Full Name",
+  "first_name": "First",
+  "last_name": "Last",
+  "email": "candidate@example.com",
+  "phone": "+91 9999999999",
+  "city": "Mysuru",
+  "state": "Karnataka",
+  "country": "India",
+  "postal_code": "570014",
+  "university": "Your University / College Name",
+  "degree": "Bachelor of Engineering (B.E.)",
+  "major": "Computer Science & Engineering",
+  "cgpa": "8.53",
+  "cgpa_scale": "10.0",
+  "graduation_year": "2028",
+  "batch": "2024-2028",
+  "linkedin": "https://www.linkedin.com/in/your-profile/",
+  "github": "https://github.com/your-username",
+  "portfolio": "https://yourportfolio.tech",
+  "work_authorization": "Authorized to work in India; no sponsorship required",
+  "notice_period": "Immediate (0-7 days)",
+  "flagship_projects": [
+    {
+      "name": "Project 1",
+      "live_url": "https://project1.domain.tech",
+      "github_url": "https://github.com/username/project1",
+      "stack": "React, TypeScript, SQLite, CRDTs",
+      "target_roles": "Systems, Geospatial, Full Stack"
+    },
+    {
+      "name": "Project 2",
+      "live_url": "https://project2.domain.tech",
+      "github_url": "https://github.com/username/project2",
+      "stack": "LangGraph, Python, FastAPI",
+      "target_roles": "AI / ML, Backend"
+    }
+  ],
+  "notion": {
+    "api_token": "ntn_xxxxxxxxxxxxxxxxxxxx",
+    "database_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  }
+}
